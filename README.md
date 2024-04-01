@@ -1,6 +1,6 @@
 # Simple Search Agent
 
-This is a simple search agent that accepts a question as input, searches the web for relevant information, and then uses the search results to generate an answer using a large language model (LLM).
+This is a simple search agent that (kind of) does what [Perplexity AI](https://www.perplexity.ai/) does.
 
 ## How It Works
 

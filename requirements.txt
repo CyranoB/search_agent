@@ -1,0 +1,11 @@
+boto3
+bs4
+docopt
+faiss-cpu
+python-dotenv
+langchain
+langchain_community
+langchain_openai
+langchain_groq
+langsmith
+rich
