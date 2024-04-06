@@ -4,6 +4,7 @@ Usage:
     search_agent.py 
         [--domain=domain]
         [--provider=provider]
+        [--model=model]
         [--temperature=temp]
         [--max_pages=num]
         [--output=text]
@@ -15,8 +16,9 @@ Options:
     --version                           Show version.
     -d domain --domain=domain           Limit search to a specific domain
     -t temp --temperature=temp          Set the temperature of the LLM [default: 0.0]
-    -p provider --provider=provider     Use a specific LLM (choices: bedrock,openai,groq) [default: openai]
-    -m num --max_pages=num              Max number of pages to retrieve [default: 10]
+    -p provider --provider=provider     Use a specific LLM (choices: bedrock,openai,groq,ollama) [default: openai]
+    -m model --model=model              Use a specific model
+    -n num --max_pages=num              Max number of pages to retrieve [default: 10]
     -o text --output=text               Output format (choices: text, markdown) [default: markdown]
 
 """
@@ -35,6 +37,7 @@ from langchain.schema import SystemMessage, HumanMessage
 from langchain.callbacks import LangChainTracer
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatOllama
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores.faiss import FAISS
 from langchain_community.chat_models.bedrock import BedrockChat
@@ -47,28 +50,40 @@ from rich.rule import Rule
 from rich.markdown import Markdown
 
 
-def get_chat_llm(provider, temperature=0.0):
-    console.log(f"Using provider {provider} with temperature {temperature}")
+def get_chat_llm(provider, model, temperature=0.0):
     match provider:
         case 'bedrock':
+            if(model == None):
+                model = "anthropic.claude-3-sonnet-20240229-v1:0"
             chat_llm = BedrockChat(
                 credentials_profile_name=os.getenv('CREDENTIALS_PROFILE_NAME'),
-                model_id="anthropic.claude-3-sonnet-20240229-v1:0",
+                model_id=model,
                 model_kwargs={"temperature": temperature },
             )
         case 'openai':
-            chat_llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=temperature)
+            if(model == None):
+                model = "gpt-3.5-turbo"
+            chat_llm = ChatOpenAI(model_name=model, temperature=temperature)
         case 'groq':
-            chat_llm = ChatGroq(model_name = 'mixtral-8x7b-32768', temperature=temperature)
+            if(model == None):
+                model = 'mixtral-8x7b-32768'
+            chat_llm = ChatGroq(model_name=model, temperature=temperature)
+        case 'ollama':
+            if(model == None):
+                model = 'llam2'            
+            chat_llm = ChatOllama(model=model, temperature=temperature)
         case _:
             raise ValueError(f"Unknown LLM provider {provider}")
+        
+    console.log(f"Using {model} on {provider} with temperature {temperature}")        
     return chat_llm
 
 def optimize_search_query(query):
     from messages import get_optimized_search_messages
-    messages = get_optimized_search_messages(query)    
+    messages = get_optimized_search_messages(query)
     response = chat.invoke(messages, config={"callbacks": callbacks})
-    return response.content
+    optimized_search_query = response.content
+    return optimized_search_query.strip('"').strip("**")
 
 
 def get_sources(query, max_pages=10, domain=None):       
@@ -219,13 +234,14 @@ if __name__ == '__main__':
     arguments = docopt(__doc__, version='Search Agent 0.1')
 
     provider = arguments["--provider"]
+    model = arguments["--model"]
     temperature = float(arguments["--temperature"])
     domain=arguments["--domain"] 
     max_pages=arguments["--max_pages"]
     output=arguments["--output"]
     query = arguments["SEARCH_QUERY"]
     
-    chat = get_chat_llm(provider, temperature)
+    chat = get_chat_llm(provider, model, temperature)
     
     with console.status(f"[bold green]Optimizing query for search: {query}"):
         optimize_search_query = optimize_search_query(query)
