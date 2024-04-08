@@ -32,28 +32,31 @@ from bs4 import BeautifulSoup
 from docopt import docopt
 import dotenv
 
+from langchain_core.documents.base import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.schema import SystemMessage, HumanMessage
+from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain.callbacks import LangChainTracer
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
-from langchain_community.chat_models import ChatOllama
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores.faiss import FAISS
 from langchain_community.chat_models.bedrock import BedrockChat
+from langchain_community.chat_models.ollama import ChatOllama
+from langchain_community.vectorstores.faiss import FAISS
+
 from langsmith import Client
 
 import requests
 
 from rich.console import Console
-from rich.rule import Rule
 from rich.markdown import Markdown
 
+from messages import get_rag_prompt_template, get_optimized_search_messages
 
-def get_chat_llm(provider, model, temperature=0.0):
+
+def get_chat_llm(provider, model=None, temperature=0.0):
     match provider:
         case 'bedrock':
-            if(model == None):
+            if model is None:
                 model = "anthropic.claude-3-sonnet-20240229-v1:0"
             chat_llm = BedrockChat(
                 credentials_profile_name=os.getenv('CREDENTIALS_PROFILE_NAME'),
@@ -61,29 +64,28 @@ def get_chat_llm(provider, model, temperature=0.0):
                 model_kwargs={"temperature": temperature },
             )
         case 'openai':
-            if(model == None):
+            if model is None:
                 model = "gpt-3.5-turbo"
             chat_llm = ChatOpenAI(model_name=model, temperature=temperature)
         case 'groq':
-            if(model == None):
+            if model is None:
                 model = 'mixtral-8x7b-32768'
             chat_llm = ChatGroq(model_name=model, temperature=temperature)
         case 'ollama':
-            if(model == None):
-                model = 'llam2'            
+            if model is None:
+                model = 'llama2'
             chat_llm = ChatOllama(model=model, temperature=temperature)
         case _:
             raise ValueError(f"Unknown LLM provider {provider}")
-        
-    console.log(f"Using {model} on {provider} with temperature {temperature}")        
+    
+    console.log(f"Using {model} on {provider} with temperature {temperature}")
     return chat_llm
 
-def optimize_search_query(query):
-    from messages import get_optimized_search_messages
+def optimize_search_query(chat_llm, query):
     messages = get_optimized_search_messages(query)
-    response = chat.invoke(messages, config={"callbacks": callbacks})
+    response = chat_llm.invoke(messages, config={"callbacks": callbacks})
     optimized_search_query = response.content
-    return optimized_search_query.strip('"').strip("**")
+    return optimized_search_query.strip('"').split("**", 1)[0]
 
 
 def get_sources(query, max_pages=10, domain=None):       
@@ -99,10 +101,10 @@ def get_sources(query, max_pages=10, domain=None):
     }
 
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=30)
 
         if response.status_code != 200:
-            raise Exception(f"HTTP error! status: {response.status_code}")
+            return []
 
         json_response = response.json()
 
@@ -140,8 +142,7 @@ def extract_main_content(html):
             element.extract()
         main_content = ' '.join(soup.body.get_text().split())
         return main_content
-    except Exception as error:
-        #console.log(f"Error extracting main content: {error}")
+    except Exception:
         return None
 
 def process_source(source):
@@ -159,68 +160,57 @@ def get_links_contents(sources):
     # Filter out None results
     return [result for result in results if result is not None]
 
-def process_and_vectorize_content(
-    contents, 
-    query,
-    text_chunk_size=1000,
-    text_chunk_overlap=200,
-    number_of_similarity_results=5
-):
-    """
-    Process and vectorize content using Langchain.
-    
-    Args:
-        contents (list): List of dictionaries containing 'title', 'link', and 'html' keys.
-        query (str): Query string for similarity search.
-        text_chunk_size (int): Size of each text chunk.
-        text_chunk_overlap (int): Overlap between text chunks.
-        number_of_similarity_results (int): Number of most similar results to return.
-        
-    Returns:
-        list: List of most similar documents.
-    """
+def vectorize(contents, text_chunk_size=1000,text_chunk_overlap=200,):
     documents = []
-    
     for content in contents:
         if content['html']:
             try:
-                # Split text into chunks
-                text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=text_chunk_size,
-                    chunk_overlap=text_chunk_overlap
-                )
-                texts = text_splitter.split_text(content['html'])
-                                
-                # Create metadata for each text chunk
-                metadatas = [{'title': content['title'], 'link': content['link']} for _ in range(len(texts))]
-                                
-                # Create vector store
-                embeddings = OpenAIEmbeddings()
-                docsearch = FAISS.from_texts(texts, embedding=embeddings, metadatas=metadatas)
-                
-                # Perform similarity search
-                docs = docsearch.similarity_search(query, k=number_of_similarity_results)
-                doc_dicts = [{'page_content': doc.page_content, 'metadata': doc.metadata} for doc in docs]
-                documents.extend(doc_dicts)
-                
+                page_content = content['html']
+                metadata = {'title': content['title'], 'source': content['link']}
+                doc = Document(page_content=page_content, metadata=metadata)
+                documents.append(doc)
             except Exception as e:
                 console.log(f"[gray]Error processing content for {content['link']}: {e}")
 
-                
-    return documents
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=text_chunk_size,
+        chunk_overlap=text_chunk_overlap
+    )
+    docs = text_splitter.split_documents(documents)
+    embeddings = OpenAIEmbeddings()
+    store = FAISS.from_documents(docs, embeddings)
+    return store
+
+def format_docs(docs):
+    formatted_docs = []
+    for d in docs:
+        content = d.page_content
+        title = d.metadata['title']
+        source = d.metadata['source']
+        doc = {"content": content, "title": title, "link": source}
+        formatted_docs.append(doc)
+    docs_as_json = json.dumps(formatted_docs, indent=2, ensure_ascii=False)
+    return docs_as_json
 
 
-def answer_query_with_sources(query, relevant_docs):
-    from messages import get_query_with_sources_messages
-    messages = get_query_with_sources_messages(query, relevant_docs)
-    response = chat.invoke(messages, config={"callbacks": callbacks})
-    return response
+def query_rag(chat_llm, question, search_query, vectorstore):
+    retriever_from_llm = MultiQueryRetriever.from_llm(
+        retriever=vectorstore.as_retriever(), llm=chat_llm,
+    )
+    unique_docs = retriever_from_llm.get_relevant_documents(query=search_query, config={"callbacks": callbacks})
+    context = format_docs(unique_docs)
+    prompt = get_rag_prompt_template().format(query=question, context=context)
+    response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
+    return response.content
+
+
+
 
 console = Console()
 dotenv.load_dotenv()
 
 callbacks = []
-if(os.getenv("LANGCHAIN_API_KEY")): 
+if os.getenv("LANGCHAIN_API_KEY"):
     callbacks.append(
         LangChainTracer(
             project_name="search agent",
@@ -230,44 +220,44 @@ if(os.getenv("LANGCHAIN_API_KEY")):
         )
     )
 
-if __name__ == '__main__':   
+if __name__ == '__main__':
     arguments = docopt(__doc__, version='Search Agent 0.1')
 
     provider = arguments["--provider"]
     model = arguments["--model"]
     temperature = float(arguments["--temperature"])
-    domain=arguments["--domain"] 
+    domain=arguments["--domain"]
     max_pages=arguments["--max_pages"]
     output=arguments["--output"]
     query = arguments["SEARCH_QUERY"]
-    
+
     chat = get_chat_llm(provider, model, temperature)
-    
+
     with console.status(f"[bold green]Optimizing query for search: {query}"):
-        optimize_search_query = optimize_search_query(query)
-    console.log(f"Optimized search query: [bold blue]{optimize_search_query}")  
-    
-    with console.status(f"[bold green]Searching sources using the optimized query: {optimize_search_query}"):
+        optimize_search_query = optimize_search_query(chat, query)
+    console.log(f"Optimized search query: [bold blue]{optimize_search_query}")
+
+    with console.status(
+            f"[bold green]Searching sources using the optimized query: {optimize_search_query}"
+        ):
         sources = get_sources(optimize_search_query, max_pages=max_pages, domain=domain)
     console.log(f"Found {len(sources)} sources {'on ' + domain if domain else ''}")
 
-    with console.status(f"[bold green]Fetching content for {len(sources)} sources", spinner="growVertical"):
+    with console.status(
+        f"[bold green]Fetching content for {len(sources)} sources", spinner="growVertical"
+    ):
         contents = get_links_contents(sources)
     console.log(f"Managed to extract content from {len(contents)} sources")
 
-    with console.status(
-            f"[bold green]Processing {len(contents)} contents and finding relevant extracts",
-            spinner="dots8Bit"
-        ):
-        relevant_docs = process_and_vectorize_content(contents, query)
-    console.log(f"Filtered {len(relevant_docs)} relevant content extracts")
+    with console.status(f"[bold green]Embeddubg {len(sources)} sources", spinner="growVertical"):
+        vector_store = vectorize(contents)
 
-    with console.status(f"[bold green]Querying LLM with {len(relevant_docs)} relevant extracts", spinner='dots8Bit'):
-        respomse = answer_query_with_sources(query, relevant_docs)
+    with console.status("[bold green]Querying LLM relevant context", spinner='dots8Bit'):
+        respomse = query_rag(chat, query, optimize_search_query, vector_store)
 
     console.rule(f"[bold green]Response from {provider}")
     if output == "text":
-        console.print(respomse.content)
+        console.print(respomse)
     else:
-        console.print(Markdown(respomse.content))
+        console.print(Markdown(respomse))
     console.rule("[bold green]")
