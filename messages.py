@@ -38,7 +38,6 @@ def get_optimized_search_messages(query):
             - Remove lenght instruction (example: essay, article, letter, etc)
             
             Add "**" to the end of the search string to indicate the end of the query
-            Provide your output in this format: optimized search string**
             
             Example:
                 Question: How do I bake chocolate chip cookies from scratch?
