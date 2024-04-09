@@ -98,6 +98,9 @@ def get_rag_prompt_template():
                 - Synthesize the retrieved information into a clear, informative answer to the question
                 - Format your answer in Markdown, using heading levels 2-3 as needed
                 - Include a "References" section at the end with the full citations and link for each source you used
+                
+                If you cannot answer the question with confidence just say: "I'm not sure about the answer to be honest"
+                If the provided context is not relevant to the question, just say: "The context provided is not relevant to the question"
             """
         )
     )

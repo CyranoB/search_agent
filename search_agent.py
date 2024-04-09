@@ -180,26 +180,27 @@ def get_links_contents(sources):
     # Filter out None results
     return [result for result in results if result is not None]
 
-def vectorize(contents, text_chunk_size=1000,text_chunk_overlap=200,):
+def vectorize(contents, text_chunk_size=500,text_chunk_overlap=50):
     documents = []
     for content in contents:
         page_content = content['snippet']
-        if 'htlm' in content:
+        if 'html' in content:
             page_content = content['html']
         if 'pdf_content' in content:
-            page_content = content['pdf_content']        
+            page_content = content['pdf_content']   
         try:
             metadata = {'title': content['title'], 'source': content['link']}
             doc = Document(page_content=page_content, metadata=metadata)
             documents.append(doc)
         except Exception as e:
             console.log(f"[gray]Error processing content for {content['link']}: {e}")
-
+            
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=text_chunk_size,
         chunk_overlap=text_chunk_overlap
     )
     docs = text_splitter.split_documents(documents)
+    console.log(f"Vectorizing {len(docs)} document chunks")
     embeddings = OpenAIEmbeddings()
     store = FAISS.from_documents(docs, embeddings)
     return store
@@ -216,7 +217,7 @@ def format_docs(docs):
     return docs_as_json
 
 
-def query_rag(chat_llm, question, search_query, vectorstore):
+def multi_query_rag(chat_llm, question, search_query, vectorstore):
     retriever_from_llm = MultiQueryRetriever.from_llm(
         retriever=vectorstore.as_retriever(), llm=chat_llm, include_original=True,
     )
@@ -228,6 +229,14 @@ def query_rag(chat_llm, question, search_query, vectorstore):
     response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
     return response.content
 
+
+def query_rag(chat_llm, question, search_query, vectorstore):
+    retriver = vectorstore.as_retriever()
+    unique_docs = retriver.get_relevant_documents(search_query, callbacks=callbacks, verbose=True)
+    context = format_docs(unique_docs)
+    prompt = get_rag_prompt_template().format(query=question, context=context)
+    response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
+    return response.content
 
 
 
@@ -278,7 +287,7 @@ if __name__ == '__main__':
         vector_store = vectorize(contents)
 
     with console.status("[bold green]Querying LLM relevant context", spinner='dots8Bit'):
-        respomse = query_rag(chat, query, optimize_search_query, vector_store)
+        respomse = multi_query_rag(chat, query, optimize_search_query, vector_store)
 
     console.rule(f"[bold green]Response from {provider}")
     if output == "text":
