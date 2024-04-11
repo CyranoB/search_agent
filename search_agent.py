@@ -33,9 +33,10 @@ from bs4 import BeautifulSoup
 from docopt import docopt
 import dotenv
 import pdfplumber
+from trafilatura import extract
 
 from langchain_core.documents.base import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_experimental.text_splitter import SemanticChunker
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain.callbacks import LangChainTracer
 from langchain_groq import ChatGroq
@@ -123,18 +124,19 @@ def get_sources(query, max_pages=10, domain=None):
         return final_results
 
     except Exception as error:
-        #console.log('Error fetching search results:', error)
+        console.log('Error fetching search results:', error)
         raise
 
 
 
 def fetch_with_timeout(url, timeout=8):
+    
     try:
         response = requests.get(url, timeout=timeout)
         response.raise_for_status()
         return response
     except requests.RequestException as error:
-        #console.log(f"Skipping {url}! Error: {error}")
+        console.log(f"Skipping {url}! Error: {error}")
         return None
 
 def extract_main_content(html):
@@ -152,25 +154,29 @@ def process_source(source):
     console.log(f"Processing {source['link']}")
     if response:
         content_type = response.headers.get('Content-Type')
-        if content_type == 'application/pdf':
-            # The response is a PDF file
-            pdf_content = response.content
-            # Create a file-like object from the bytes
-            pdf_file = io.BytesIO(pdf_content)
-            # Extract text from PDF using pdfplumber
-            with pdfplumber.open(pdf_file) as pdf:
-                text = ""
-                for page in pdf.pages:
-                    text += page.extract_text()
-            return {**source, 'pdf_content': text}
-        elif content_type.startswith('text/html'):
-            # The response is an HTML file
-            html = response.text
-            main_content = extract_main_content(html)
-            return {**source, 'html': main_content}
+        if content_type:
+            if content_type.startswith('application/pdf'):
+                # The response is a PDF file
+                pdf_content = response.content
+                # Create a file-like object from the bytes
+                pdf_file = io.BytesIO(pdf_content)
+                # Extract text from PDF using pdfplumber
+                with pdfplumber.open(pdf_file) as pdf:
+                    text = ""
+                    for page in pdf.pages:
+                        text += page.extract_text()
+                return {**source, 'page_content': text}
+            elif content_type.startswith('text/html'):
+                # The response is an HTML file
+                html = response.text
+                main_content = extract(html, output_format='txt', include_links=True)
+                return {**source, 'page_content': main_content}
+            else:
+                console.log(f"Skipping {source['link']}! Unsupported content type: {content_type}")
+                return {**source, 'page_content': source['snippet']}
         else:
-            console.log(f"Skipping {source['link']}! Unsupported content type: {content_type}")
-            return None
+            console.log(f"Skipping {source['link']}! No content type")
+            return {**source, 'page_content': source['snippet']}
     return None
 
 def get_links_contents(sources):
@@ -180,26 +186,17 @@ def get_links_contents(sources):
     # Filter out None results
     return [result for result in results if result is not None]
 
-def vectorize(contents, text_chunk_size=500,text_chunk_overlap=50):
+def vectorize(contents, text_chunk_size=400,text_chunk_overlap=40):
     documents = []
     for content in contents:
-        page_content = content['snippet']
-        if 'html' in content:
-            page_content = content['html']
-        if 'pdf_content' in content:
-            page_content = content['pdf_content']   
         try:
             metadata = {'title': content['title'], 'source': content['link']}
-            doc = Document(page_content=page_content, metadata=metadata)
+            doc = Document(page_content=content['page_content'], metadata=metadata)
             documents.append(doc)
         except Exception as e:
             console.log(f"[gray]Error processing content for {content['link']}: {e}")
-            
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=text_chunk_size,
-        chunk_overlap=text_chunk_overlap
-    )
-    docs = text_splitter.split_documents(documents)
+    semantic_chunker = SemanticChunker(OpenAIEmbeddings(model="text-embedding-3-large"), breakpoint_threshold_type="percentile")
+    docs = semantic_chunker.split_documents(documents)
     console.log(f"Vectorizing {len(docs)} document chunks")
     embeddings = OpenAIEmbeddings()
     store = FAISS.from_documents(docs, embeddings)
@@ -231,8 +228,9 @@ def multi_query_rag(chat_llm, question, search_query, vectorstore):
 
 
 def query_rag(chat_llm, question, search_query, vectorstore):
-    retriver = vectorstore.as_retriever()
-    unique_docs = retriver.get_relevant_documents(search_query, callbacks=callbacks, verbose=True)
+    #retriver = vectorstore.as_retriever()
+    #unique_docs = retriver.get_relevant_documents(search_query, callbacks=callbacks, verbose=True)
+    unique_docs = vectorstore.similarity_search(search_query, k=5)
     context = format_docs(unique_docs)
     prompt = get_rag_prompt_template().format(query=question, context=context)
     response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
@@ -287,7 +285,7 @@ if __name__ == '__main__':
         vector_store = vectorize(contents)
 
     with console.status("[bold green]Querying LLM relevant context", spinner='dots8Bit'):
-        respomse = multi_query_rag(chat, query, optimize_search_query, vector_store)
+        respomse = query_rag(chat, query, optimize_search_query, vector_store)
 
     console.rule(f"[bold green]Response from {provider}")
     if output == "text":
