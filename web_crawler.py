@@ -5,8 +5,6 @@ import os
 import io
 
 from trafilatura import extract
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException
 from langchain_core.documents.base import Document
 from langchain_experimental.text_splitter import SemanticChunker
