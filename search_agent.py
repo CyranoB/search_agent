@@ -101,7 +101,7 @@ if __name__ == '__main__':
         vector_store = wc.vectorize(contents)
 
     with console.status("[bold green]Querying LLM relevant context", spinner='dots8Bit'):
-        respomse = wr.query_rag(chat, query, optimize_search_query, vector_store, callbacks=callbacks)
+        respomse = wr.query_rag(chat, query, optimize_search_query, vector_store, top_k = 5, callbacks=callbacks)
 
     console.rule(f"[bold green]Response from {provider}")
     if output == "text":

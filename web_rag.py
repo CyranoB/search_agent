@@ -219,7 +219,7 @@ def build_rag_prompt(question, search_query, vectorstore, top_k = 10, callbacks 
     prompt = get_rag_prompt_template().format(query=question, context=context)
     return prompt    
 
-def query_rag(chat_llm, question, search_query, vectorstore, callbacks = []):
-    prompt = build_rag_prompt(question, search_query, vectorstore, callbacks)
+def query_rag(chat_llm, question, search_query, vectorstore, top_k = 10, callbacks = []):
+    prompt = build_rag_prompt(question, search_query, vectorstore, top_k= top_k, callbacks = callbacks)
     response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
     return response.content
