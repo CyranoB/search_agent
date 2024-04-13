@@ -16,7 +16,7 @@ Options:
     --version                           Show version.
     -d domain --domain=domain           Limit search to a specific domain
     -t temp --temperature=temp          Set the temperature of the LLM [default: 0.0]
-    -p provider --provider=provider     Use a specific LLM (choices: bedrock,openai,groq,ollama) [default: openai]
+    -p provider --provider=provider     Use a specific LLM (choices: bedrock,openai,groq,ollama,cohere) [default: openai]
     -m model --model=model              Use a specific model
     -n num --max_pages=num              Max number of pages to retrieve [default: 10]
     -o text --output=text               Output format (choices: text, markdown) [default: markdown]
@@ -29,16 +29,19 @@ import io
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 
-from bs4 import BeautifulSoup
 from docopt import docopt
 import dotenv
 import pdfplumber
 from trafilatura import extract
 
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+
 from langchain_core.documents.base import Document
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain.callbacks import LangChainTracer
+from langchain_cohere.chat_models import ChatCohere
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_openai import OpenAIEmbeddings
@@ -78,6 +81,10 @@ def get_chat_llm(provider, model=None, temperature=0.0):
             if model is None:
                 model = 'llama2'
             chat_llm = ChatOllama(model=model, temperature=temperature)
+        case 'cohere':
+            if model is None:
+                model = 'command-r-plus'
+            chat_llm = ChatCohere(model=model, temperature=temperature)
         case _:
             raise ValueError(f"Unknown LLM provider {provider}")
 
@@ -127,31 +134,39 @@ def get_sources(query, max_pages=10, domain=None):
         console.log('Error fetching search results:', error)
         raise
 
+def fetch_with_selenium(url, timeout=8):
+    chrome_options = Options()
+    chrome_options.add_argument("headless")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--remote-debugging-port=9222")
+    chrome_options.add_argument('--blink-settings=imagesEnabled=false')
+    chrome_options.add_argument("--window-size=1920,1080")
 
+    driver = webdriver.Chrome(options=chrome_options)
+
+    driver.get(url)
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    html = driver.page_source
+    driver.quit()
+    
+    return html
 
 def fetch_with_timeout(url, timeout=8):
-    
     try:
         response = requests.get(url, timeout=timeout)
         response.raise_for_status()
         return response
     except requests.RequestException as error:
-        console.log(f"Skipping {url}! Error: {error}")
         return None
 
-def extract_main_content(html):
-    try:
-        soup = BeautifulSoup(html, 'html.parser')
-        for element in soup(["script", "style", "head", "nav", "footer", "iframe", "img"]):
-            element.extract()
-        main_content = soup.get_text(separator='\n', strip=True)
-        return main_content
-    except Exception:
-        return None
 
 def process_source(source):
-    response = fetch_with_timeout(source['link'], 8)
-    console.log(f"Processing {source['link']}")
+    url = source['link']
+    #console.log(f"Processing {url}")
+    response = fetch_with_timeout(url, 8)
     if response:
         content_type = response.headers.get('Content-Type')
         if content_type:
@@ -172,16 +187,24 @@ def process_source(source):
                 main_content = extract(html, output_format='txt', include_links=True)
                 return {**source, 'page_content': main_content}
             else:
-                console.log(f"Skipping {source['link']}! Unsupported content type: {content_type}")
+                console.log(f"Skipping {url}! Unsupported content type: {content_type}")
                 return {**source, 'page_content': source['snippet']}
         else:
-            console.log(f"Skipping {source['link']}! No content type")
+            console.log(f"Skipping {url}! No content type")
             return {**source, 'page_content': source['snippet']}
-    return None
+    return {**source, 'page_content': None}
 
 def get_links_contents(sources):
     with ThreadPoolExecutor() as executor:
-        results = list(executor.map(process_source, sources))
+        results = list(executor.map(process_source, sources))  
+    for result in results:
+        if result['page_content'] is None:
+            url = result['link']
+            console.log(f"Fetching with selenium {url}")
+            html = fetch_with_selenium(url, 8)
+            main_content = extract(html, output_format='txt', include_links=True)
+            if main_content:
+                result['page_content'] = main_content
 
     # Filter out None results
     return [result for result in results if result is not None]
@@ -228,9 +251,7 @@ def multi_query_rag(chat_llm, question, search_query, vectorstore):
 
 
 def query_rag(chat_llm, question, search_query, vectorstore):
-    #retriver = vectorstore.as_retriever()
-    #unique_docs = retriver.get_relevant_documents(search_query, callbacks=callbacks, verbose=True)
-    unique_docs = vectorstore.similarity_search(search_query, k=5)
+    unique_docs = vectorstore.similarity_search(search_query, k=15, callbacks=callbacks, verbose=True)
     context = format_docs(unique_docs)
     prompt = get_rag_prompt_template().format(query=question, context=context)
     response = chat_llm.invoke(prompt, config={"callbacks": callbacks})

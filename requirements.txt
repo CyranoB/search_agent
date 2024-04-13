@@ -1,11 +1,13 @@
 boto3
 bs4
+cohere
 docopt
 faiss-cpu
 google-api-python-client
 pdfplumber
 python-dotenv
 langchain
+langchain-cohere
 langchain_core
 langchain_community
 langchain_experimental
