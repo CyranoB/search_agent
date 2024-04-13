@@ -14,5 +14,7 @@ langchain_experimental
 langchain_openai
 langchain_groq
 langsmith
+streamlit
 rich
 trafilatura
+watchdog

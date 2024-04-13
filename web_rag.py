@@ -1,8 +1,24 @@
 """
-This module provides functions for generating optimized search messages, RAG prompt templates,
-and messages for queries with relevant source documents using the LangChain library.
+Module for performing retrieval-augmented generation (RAG) using LangChain.
+This module provides functions to optimize search queries, retrieve relevant documents,
+and generate answers to questions using the retrieved context. It leverages the LangChain
+library for building the RAG pipeline.
+Functions:
+- get_optimized_search_messages(query: str) -> list:
+Generate optimized search messages for a given query.
+- optimize_search_query(chat_llm, query: str, callbacks: list = []) -> str:
+Optimize the search query using the chat language model.
+- get_rag_prompt_template() -> ChatPromptTemplate:
+Get the prompt template for retrieval-augmented generation (RAG).
+- format_docs(docs: list) -> str:
+Format the retrieved documents into a JSON string.
+- multi_query_rag(chat_llm, question: str, search_query: str, vectorstore, callbacks: list = []) -> str:
+Perform RAG using multiple queries to retrieve relevant documents.
+- query_rag(chat_llm, question: str, search_query: str, vectorstore, callbacks: list = []) -> str:
+Perform RAG using a single query to retrieve relevant documents.
 """
-
+import os
+import json
 from langchain.schema import SystemMessage, HumanMessage
 from langchain.prompts.chat import (
     HumanMessagePromptTemplate,
@@ -10,6 +26,44 @@ from langchain.prompts.chat import (
     ChatPromptTemplate
 )
 from langchain.prompts.prompt import PromptTemplate
+from langchain.retrievers.multi_query import MultiQueryRetriever
+
+from langchain_cohere.chat_models import ChatCohere
+from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
+from langchain_community.chat_models.bedrock import BedrockChat
+from langchain_community.chat_models.ollama import ChatOllama
+
+def get_chat_llm(provider, model=None, temperature=0.0):
+    match provider:
+        case 'bedrock':
+            if model is None:
+                model = "anthropic.claude-3-sonnet-20240229-v1:0"
+            chat_llm = BedrockChat(
+                credentials_profile_name=os.getenv('CREDENTIALS_PROFILE_NAME'),
+                model_id=model,
+                model_kwargs={"temperature": temperature },
+            )
+        case 'openai':
+            if model is None:
+                model = "gpt-3.5-turbo"
+            chat_llm = ChatOpenAI(model_name=model, temperature=temperature)
+        case 'groq':
+            if model is None:
+                model = 'mixtral-8x7b-32768'
+            chat_llm = ChatGroq(model_name=model, temperature=temperature)
+        case 'ollama':
+            if model is None:
+                model = 'llama2'
+            chat_llm = ChatOllama(model=model, temperature=temperature)
+        case 'cohere':
+            if model is None:
+                model = 'command-r-plus'
+            chat_llm = ChatCohere(model=model, temperature=temperature)
+        case _:
+            raise ValueError(f"Unknown LLM provider {provider}")
+    return chat_llm
+
 
 def get_optimized_search_messages(query):
     """
@@ -76,6 +130,14 @@ def get_optimized_search_messages(query):
     )
     return [system_message, human_message]
 
+
+def optimize_search_query(chat_llm, query, callbacks=[]):
+    messages = get_optimized_search_messages(query)
+    response = chat_llm.invoke(messages, config={"callbacks": callbacks})
+    optimized_search_query = response.content
+    return optimized_search_query.strip('"').split("**", 1)[0]
+
+
 def get_rag_prompt_template():
     """
     Get the prompt template for Retrieval-Augmented Generation (RAG).
@@ -121,3 +183,35 @@ def get_rag_prompt_template():
         input_variables=["context", "query"],
         messages=[system_prompt, human_prompt],
     )
+
+def format_docs(docs):
+    formatted_docs = []
+    for d in docs:
+        content = d.page_content
+        title = d.metadata['title']
+        source = d.metadata['source']
+        doc = {"content": content, "title": title, "link": source}
+        formatted_docs.append(doc)
+    docs_as_json = json.dumps(formatted_docs, indent=2, ensure_ascii=False)
+    return docs_as_json
+
+
+def multi_query_rag(chat_llm, question, search_query, vectorstore, callbacks = []):
+    retriever_from_llm = MultiQueryRetriever.from_llm(
+        retriever=vectorstore.as_retriever(), llm=chat_llm, include_original=True,
+    )
+    unique_docs = retriever_from_llm.get_relevant_documents(
+        query=search_query, callbacks=callbacks, verbose=True
+    )
+    context = format_docs(unique_docs)
+    prompt = get_rag_prompt_template().format(query=question, context=context)
+    response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
+    return response.content
+
+
+def query_rag(chat_llm, question, search_query, vectorstore, callbacks = []):
+    unique_docs = vectorstore.similarity_search(search_query, k=15, callbacks=callbacks, verbose=True)
+    context = format_docs(unique_docs)
+    prompt = get_rag_prompt_template().format(query=question, context=context)
+    response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
+    return response.content
