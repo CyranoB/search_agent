@@ -41,6 +41,26 @@ import web_crawler as wc
 console = Console()
 dotenv.load_dotenv()
 
+def get_selenium_driver():
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.common.exceptions import TimeoutException
+
+    chrome_options = Options()
+    chrome_options.add_argument("headless")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--remote-debugging-port=9222")
+    chrome_options.add_argument('--blink-settings=imagesEnabled=false')
+    chrome_options.add_argument("--window-size=1920,1080")
+
+    driver = webdriver.Chrome(options=chrome_options)
+    return driver
+
+
+
 callbacks = []
 if os.getenv("LANGCHAIN_API_KEY"):
     callbacks.append(
@@ -59,7 +79,7 @@ if __name__ == '__main__':
     query = arguments["SEARCH_QUERY"]
 
     chat = wr.get_chat_llm(provider, model, temperature)
-    console.log(f"Using {chat.get_name} on {provider} with temperature {temperature}")
+    #console.log(f"Using {model} on {provider} with temperature {temperature}")
 
     with console.status(f"[bold green]Optimizing query for search: {query}"):
         optimize_search_query = wr.optimize_search_query(chat, query, callbacks=callbacks)
@@ -74,7 +94,7 @@ if __name__ == '__main__':
     with console.status(
         f"[bold green]Fetching content for {len(sources)} sources", spinner="growVertical"
     ):
-        contents = wc.get_links_contents(sources)
+        contents = wc.get_links_contents(sources, get_selenium_driver)
     console.log(f"Managed to extract content from {len(contents)} sources")
 
     with console.status(f"[bold green]Embeddubg {len(contents)} sources for content", spinner="growVertical"):

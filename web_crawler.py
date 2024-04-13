@@ -52,19 +52,9 @@ def get_sources(query, max_pages=10, domain=None):
         print('Error fetching search results:', error)
         raise
 
-def fetch_with_selenium(url, timeout=8):
-    chrome_options = Options()
-    chrome_options.add_argument("headless")
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--remote-debugging-port=9222")
-    chrome_options.add_argument('--blink-settings=imagesEnabled=false')
-    chrome_options.add_argument("--window-size=1920,1080")
 
-    driver = webdriver.Chrome(options=chrome_options)
-    
+
+def fetch_with_selenium(url, driver, timeout=8,):
     try:
         driver.set_page_load_timeout(timeout)
         driver.get(url)
@@ -118,28 +108,33 @@ def process_source(source):
             return {**source, 'page_content': source['snippet']}
     return {**source, 'page_content': None}
 
-def get_links_contents(sources):
+def get_links_contents(sources, get_driver_func=None):
     with ThreadPoolExecutor() as executor:
-        results = list(executor.map(process_source, sources))  
+        results = list(executor.map(process_source, sources))
+
+    if get_driver_func is None:
+        return [result for result in results if result is not None]
+
     for result in results:
         if result['page_content'] is None:
             url = result['link']
             print(f"Fetching with selenium {url}")
-            html = fetch_with_selenium(url, 8)
+            driver = get_driver_func()
+            html = fetch_with_selenium(url, driver)
             main_content = extract(html, output_format='txt', include_links=True)
             if main_content:
                 result['page_content'] = main_content
-
-    # Filter out None results
-    return [result for result in results if result is not None]
+    return results
 
 def vectorize(contents):
     documents = []
     for content in contents:
         try:
-            metadata = {'title': content['title'], 'source': content['link']}
-            doc = Document(page_content=content['page_content'], metadata=metadata)
-            documents.append(doc)
+            page_content = content['page_content']
+            if page_content: # Sometimes Selenium is not fetching properly
+                metadata = {'title': content['title'], 'source': content['link']}
+                doc = Document(page_content=content['page_content'], metadata=metadata)
+                documents.append(doc)
         except Exception as e:
             print(f"[gray]Error processing content for {content['link']}: {e}")
     semantic_chunker = SemanticChunker(OpenAIEmbeddings(model="text-embedding-3-large"), breakpoint_threshold_type="percentile")

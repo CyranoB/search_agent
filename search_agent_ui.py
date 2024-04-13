@@ -15,6 +15,7 @@ ls_tracer = LangChainTracer(
     client=Client()
 )
 
+
 chat = wr.get_chat_llm(provider="cohere")
 
 st.title("🔍 Simple Search Agent 💬")
@@ -43,7 +44,7 @@ if prompt := st.chat_input():
     
     
     with st.spinner(f"Searching the web for: {optimize_search_query}"):
-        sources = wc.get_sources(optimize_search_query)
+        sources = wc.get_sources(optimize_search_query, max_pages=20)
         
     with st.spinner(f"I'm now retrieveing the {len(sources)} webpages and documents I found (be patient)"):
         contents = wc.get_links_contents(sources)
