@@ -120,6 +120,9 @@ def get_optimized_search_messages(query):
             Example:
                 Question: Write a short article about the solar system in the style of donald trump
                 Search query: solar system**
+            Exmaple:
+                Question: Write a short linkedin about how the "freakeconomics" book previsions didn't pan out
+                Search query: freakeconomics book predictions failed**
         """
     )
     human_message = HumanMessage(
@@ -209,9 +212,14 @@ def multi_query_rag(chat_llm, question, search_query, vectorstore, callbacks = [
     return response.content
 
 
-def query_rag(chat_llm, question, search_query, vectorstore, callbacks = []):
-    unique_docs = vectorstore.similarity_search(search_query, k=15, callbacks=callbacks, verbose=True)
+def build_rag_prompt(question, search_query, vectorstore, top_k = 10, callbacks = []):
+    unique_docs = vectorstore.similarity_search(
+        search_query, k=top_k, callbacks=callbacks, verbose=True)
     context = format_docs(unique_docs)
     prompt = get_rag_prompt_template().format(query=question, context=context)
+    return prompt    
+
+def query_rag(chat_llm, question, search_query, vectorstore, callbacks = []):
+    prompt = build_rag_prompt(question, search_query, vectorstore, callbacks)
     response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
     return response.content
