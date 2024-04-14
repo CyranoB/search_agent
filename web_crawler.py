@@ -124,7 +124,7 @@ def get_links_contents(sources, get_driver_func=None):
                 result['page_content'] = main_content
     return results
 
-def vectorize(contents):
+def vectorize(contents, embedding_model):
     documents = []
     for content in contents:
         try:
@@ -135,7 +135,7 @@ def vectorize(contents):
                 documents.append(doc)
         except Exception as e:
             print(f"[gray]Error processing content for {content['link']}: {e}")
-    semantic_chunker = SemanticChunker(OpenAIEmbeddings(model="text-embedding-3-large"), breakpoint_threshold_type="percentile")
+    semantic_chunker = SemanticChunker(embedding_model, breakpoint_threshold_type="percentile")
     docs = semantic_chunker.split_documents(documents)
     embeddings = OpenAIEmbeddings()
     store = FAISS.from_documents(docs, embeddings)

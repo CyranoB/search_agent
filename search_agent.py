@@ -16,7 +16,7 @@ Options:
     --version                           Show version.
     -d domain --domain=domain           Limit search to a specific domain
     -t temp --temperature=temp          Set the temperature of the LLM [default: 0.0]
-    -p provider --provider=provider     Use a specific LLM (choices: bedrock,openai,groq,ollama,cohere) [default: openai]
+    -p provider --provider=provider     Use a specific LLM (choices: bedrock,openai,groq,ollama,cohere,fireworks) [default: openai]
     -m model --model=model              Use a specific model
     -n num --max_pages=num              Max number of pages to retrieve [default: 10]
     -o text --output=text               Output format (choices: text, markdown) [default: markdown]
@@ -78,8 +78,8 @@ if __name__ == '__main__':
     output=arguments["--output"]
     query = arguments["SEARCH_QUERY"]
 
-    chat = wr.get_chat_llm(provider, model, temperature)
-    console.log(f"Using {chat.model} on {provider} with temperature {temperature}")
+    chat, embedding_model = wr.get_models(provider, model, temperature)
+    #console.log(f"Using {chat.model_name} on {provider}")
 
     with console.status(f"[bold green]Optimizing query for search: {query}"):
         optimize_search_query = wr.optimize_search_query(chat, query, callbacks=callbacks)
@@ -98,7 +98,7 @@ if __name__ == '__main__':
     console.log(f"Managed to extract content from {len(contents)} sources")
 
     with console.status(f"[bold green]Embeddubg {len(contents)} sources for content", spinner="growVertical"):
-        vector_store = wc.vectorize(contents)
+        vector_store = wc.vectorize(contents, embedding_model)
 
     with console.status("[bold green]Querying LLM relevant context", spinner='dots8Bit'):
         respomse = wr.query_rag(chat, query, optimize_search_query, vector_store, top_k = 5, callbacks=callbacks)

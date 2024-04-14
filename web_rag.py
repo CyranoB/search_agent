@@ -29,40 +29,58 @@ from langchain.prompts.prompt import PromptTemplate
 from langchain.retrievers.multi_query import MultiQueryRetriever
 
 from langchain_cohere.chat_models import ChatCohere
+from langchain_cohere.embeddings import CohereEmbeddings
+from langchain_fireworks.chat_models import ChatFireworks
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_community.chat_models.bedrock import BedrockChat
+from langchain_community.embeddings.bedrock import BedrockEmbeddings
 from langchain_community.chat_models.ollama import ChatOllama
 
-def get_chat_llm(provider, model=None, temperature=0.0):
+def get_models(provider, model=None, temperature=0.0):
     match provider:
         case 'bedrock':
+            credentials_profile_name=os.getenv('CREDENTIALS_PROFILE_NAME')
             if model is None:
                 model = "anthropic.claude-3-sonnet-20240229-v1:0"
             chat_llm = BedrockChat(
-                credentials_profile_name=os.getenv('CREDENTIALS_PROFILE_NAME'),
+                credentials_profile_name=credentials_profile_name,
                 model_id=model,
                 model_kwargs={"temperature": temperature },
+            )
+            embedding_model = BedrockEmbeddings(
+                model_id='cohere.embed-multilingual-v3',
+                credentials_profile_name=credentials_profile_name
             )
         case 'openai':
             if model is None:
                 model = "gpt-3.5-turbo"
             chat_llm = ChatOpenAI(model_name=model, temperature=temperature)
+            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case 'groq':
             if model is None:
                 model = 'mixtral-8x7b-32768'
             chat_llm = ChatGroq(model_name=model, temperature=temperature)
+            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case 'ollama':
             if model is None:
                 model = 'llama2'
             chat_llm = ChatOllama(model=model, temperature=temperature)
+            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case 'cohere':
             if model is None:
                 model = 'command-r-plus'
             chat_llm = ChatCohere(model=model, temperature=temperature)
+            embedding_model = CohereEmbeddings(model="embed-english-light-v3.0")
+        case 'fireworks':
+            if model is None:
+                model = 'accounts/fireworks/models/mixtral-8x22b-instruct-preview'
+            chat_llm = ChatFireworks(model_name=model, temperature=temperature)
+            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case _:
             raise ValueError(f"Unknown LLM provider {provider}")
-    return chat_llm
+    return chat_llm, embedding_model
 
 
 def get_optimized_search_messages(query):

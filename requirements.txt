@@ -8,6 +8,7 @@ pdfplumber
 python-dotenv
 langchain
 langchain-cohere
+langchain-fireworks
 langchain_core
 langchain_community
 langchain_experimental
