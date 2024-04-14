@@ -1,3 +1,15 @@
+---
+title: Search Agent
+emoji: 🔍
+colorFrom: gray
+colorTo: yellow
+sdk: streamlit
+sdk_version: 1.33.0
+app_file: search_agent_ui.py
+pinned: false
+license: apache-2.0
+---
+
 # Simple Search Agent
 
 This Python project provides a search agent that can perform web searches, optimize search queries, fetch and process web content, and generate responses using a language model and the retrieved information.
