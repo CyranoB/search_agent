@@ -79,7 +79,7 @@ if __name__ == '__main__':
     query = arguments["SEARCH_QUERY"]
 
     chat = wr.get_chat_llm(provider, model, temperature)
-    #console.log(f"Using {model} on {provider} with temperature {temperature}")
+    console.log(f"Using {chat.model} on {provider} with temperature {temperature}")
 
     with console.status(f"[bold green]Optimizing query for search: {query}"):
         optimize_search_query = wr.optimize_search_query(chat, query, callbacks=callbacks)

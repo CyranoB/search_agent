@@ -53,29 +53,20 @@ if prompt := st.chat_input("Enter you instructions...", disabled=st.session_stat
     st.chat_message("user").write(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    message = "I first need to do some research"
-    st.chat_message("assistant").write(message)
-    st.session_state.messages.append({"role": "assistant", "content": message})
-   
-    with st.spinner("Optimizing search query"):
+    with st.status("Thinking", expanded=True):
+        st.write("I first need to do some research")
+        
         optimize_search_query = wr.optimize_search_query(chat, query=prompt, callbacks=[ls_tracer])
-            
-    message = f"I'll search the web for: {optimize_search_query}"
-    st.chat_message("assistant").write(message)
-    st.session_state.messages.append({"role": "assistant", "content": message})
-       
-    with st.spinner(f"Searching the web for: {optimize_search_query}"):
+        st.write(f"I should search the web for: {optimize_search_query}")
+        
         sources = wc.get_sources(optimize_search_query, max_pages=20)
        
-    with st.spinner(f"I'm now retrieveing the {len(sources)} webpages and documents I found (be patient)"):
+        st.write(f"I'll now retrieve the {len(sources)} webpages and documents I found")
         contents = wc.get_links_contents(sources)
 
-    with st.spinner( f"Reading through the {len(contents)} sources I managed to retrieve"):
+        st.write( f"Reading through the {len(contents)} sources I managed to retrieve")
         vector_store = wc.vectorize(contents)
-    
-    message = f"Got {vector_store.index.ntotal} chunk of data"
-    st.chat_message("assistant").write(message)
-    st.session_state.messages.append({"role": "assistant", "content": message})
+        st.write(f"I collected {vector_store.index.ntotal} chunk of data and I can now answer")
 
     rag_prompt = wr.build_rag_prompt(prompt, optimize_search_query, vector_store, top_k=5, callbacks=[ls_tracer])  
     with st.chat_message("assistant"):

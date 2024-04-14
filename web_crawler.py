@@ -137,7 +137,6 @@ def vectorize(contents):
             print(f"[gray]Error processing content for {content['link']}: {e}")
     semantic_chunker = SemanticChunker(OpenAIEmbeddings(model="text-embedding-3-large"), breakpoint_threshold_type="percentile")
     docs = semantic_chunker.split_documents(documents)
-    print(f"Vectorizing {len(docs)} document chunks")
     embeddings = OpenAIEmbeddings()
     store = FAISS.from_documents(docs, embeddings)
     return store

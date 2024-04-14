@@ -15,8 +15,9 @@ license: apache-2.0
 This Python project provides a search agent that can perform web searches, optimize search queries, fetch and process web content, and generate responses using a language model and the retrieved information.
 Does a bit what [Perplexity AI](https://www.perplexity.ai/) does.
 
+The Streamlit GUI hosted on 🤗 Sapces is [available to test](https://huggingface.co/spaces/CyranoB/search_agent)
 
-This Python script is a search agent that utilizes the LangChain library to perform optimized web searches, retrieve relevant content, and generate informative answers to user queries. The script supports multiple language models and providers, including OpenAI, Anthropic, and Groq.
+This Python script and Streamli GUI are a basic search agent that utilizes the LangChain library to perform optimized web searches, retrieve relevant content, and generate informative answers to user queries. The script supports multiple language models and providers, including OpenAI, Anthropic, and Groq.
 
 The main functionality of the script can be summarized as follows:
 
@@ -34,7 +35,7 @@ To run the script, users need to provide their API keys for the desired language
 
 ## Features
 
-- Supports multiple language model providers (Bedrock, OpenAI, Groq, and Ollama)
+- Supports multiple language model providers (Bedrock, OpenAI, Groq, Cohere, and Ollama)
 - Optimizes search queries using a language model
 - Fetches web pages and extracts main content (HTML and PDF)
 - Vectorizes the content for efficient retrieval
