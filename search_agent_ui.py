@@ -52,7 +52,7 @@ with st.sidebar:
     model_provider = st.selectbox("🧠 Model provider 🧠", st.session_state["providers"])
     temperature = st.slider("🌡️ Model temperature 🌡️", 0.0, 1.0, 0.1, help="The higher the more creative")
     max_pages = st.slider("🔍 Max pages to retrieve 🔍", 1, 20, 15, help="How many web pages to retrive from the internet")
-    top_k_documents = st.slider("📄 How many document extracts to consider 📄", 1, 20, 5, help="How many of the top extracts to consider")
+    top_k_documents = st.slider("📄 How many doc extracts to consider 📄", 1, 20, 5, help="How many of the top extracts to consider")
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]

@@ -15,6 +15,7 @@ langchain_experimental
 langchain_openai
 langchain_groq
 langsmith
+schema
 streamlit
 selenium
 rich

@@ -47,12 +47,13 @@ def get_models(provider, model=None, temperature=0.0):
             chat_llm = BedrockChat(
                 credentials_profile_name=credentials_profile_name,
                 model_id=model,
-                model_kwargs={"temperature": temperature },
+                model_kwargs={"temperature": temperature, 'max_tokens': 8192 },
             )
-            embedding_model = BedrockEmbeddings(
-                model_id='cohere.embed-multilingual-v3',
-                credentials_profile_name=credentials_profile_name
-            )
+            #embedding_model = BedrockEmbeddings(
+            #    model_id='cohere.embed-multilingual-v3',
+            #    credentials_profile_name=credentials_profile_name
+            #)
+            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case 'openai':
             if model is None:
                 model = "gpt-3.5-turbo"

@@ -6,6 +6,7 @@ Usage:
         [--provider=provider]
         [--model=model]
         [--temperature=temp]
+        [--copywrite]
         [--max_pages=num]
         [--output=text]
         SEARCH_QUERY
@@ -14,6 +15,7 @@ Usage:
 Options:
     -h --help                           Show this screen.
     --version                           Show version.
+    -c --copywrite                      First produce a draft, review it and rewrite for a final text
     -d domain --domain=domain           Limit search to a specific domain
     -t temp --temperature=temp          Set the temperature of the LLM [default: 0.0]
     -p provider --provider=provider     Use a specific LLM (choices: bedrock,openai,groq,ollama,cohere,fireworks) [default: openai]
@@ -26,6 +28,7 @@ Options:
 import os
 
 from docopt import docopt
+#from schema import Schema, Use, SchemaError
 import dotenv
 
 from langchain.callbacks import LangChainTracer
@@ -37,6 +40,7 @@ from rich.markdown import Markdown
 
 import web_rag as wr
 import web_crawler as wc
+import copywriter as cw
 
 console = Console()
 dotenv.load_dotenv()
@@ -69,7 +73,18 @@ if os.getenv("LANGCHAIN_API_KEY"):
 
 if __name__ == '__main__':
     arguments = docopt(__doc__, version='Search Agent 0.1')
+    
+    #schema = Schema({
+    #    '--max_pages': Use(int, error='--max_pages must be an integer'),
+    #    '--temperature': Use(float, error='--temperature must be an float'),
+    #})
 
+    #try:
+    #    arguments = schema.validate(arguments)
+    #except SchemaError as e:
+    #    exit(e)
+
+    copywrite_mode = arguments["--copywrite"]
     provider = arguments["--provider"]
     model = arguments["--model"]
     temperature = float(arguments["--temperature"])
@@ -101,11 +116,32 @@ if __name__ == '__main__':
         vector_store = wc.vectorize(contents, embedding_model)
 
     with console.status("[bold green]Querying LLM relevant context", spinner='dots8Bit'):
-        respomse = wr.query_rag(chat, query, optimize_search_query, vector_store, top_k = 5, callbacks=callbacks)
+        draft = wr.query_rag(chat, query, optimize_search_query, vector_store, top_k = 5, callbacks=callbacks)
 
     console.rule(f"[bold green]Response from {provider}")
     if output == "text":
-        console.print(respomse)
+        console.print(draft)
     else:
-        console.print(Markdown(respomse))
+        console.print(Markdown(draft))
     console.rule("[bold green]")
+    
+    if(copywrite_mode):
+        with console.status("[bold green]Getting comments from the reviewer", spinner="dots8Bit"):
+            comments = cw.generate_comments(chat, query, draft, callbacks=callbacks)
+
+        console.rule(f"[bold green]Response from reviewer")
+        if output == "text":
+            console.print(comments)
+        else:
+            console.print(Markdown(comments))
+        console.rule("[bold green]")
+
+        with console.status("[bold green]Writing the final text", spinner="dots8Bit"):
+            final_text = cw.generate_final_text(chat, query, draft, comments, callbacks=callbacks)
+
+        console.rule(f"[bold green]Final text")
+        if output == "text":
+            console.print(final_text)
+        else:
+            console.print(Markdown(final_text))
+        console.rule("[bold green]")
