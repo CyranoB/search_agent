@@ -10,6 +10,8 @@ pinned: false
 license: apache-2.0
 ---
 
+⚠️ **This project is a demonstration / proof-of-concept and is not intended for use in production environments. It is provided as-is, without warranty or guarantee of any kind. The code and any accompanying materials are for educational, testing, or evaluation purposes only.**⚠️
+
 # Simple Search Agent
 
 This Python project provides a search agent that can perform web searches, optimize search queries, fetch and process web content, and generate responses using a language model and the retrieved information.

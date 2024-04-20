@@ -1,5 +1,7 @@
+anthropic
 boto3
 bs4
+chromedriver-py
 cohere
 docopt
 faiss-cpu
@@ -7,7 +9,7 @@ google-api-python-client
 pdfplumber
 python-dotenv
 langchain
-langchain-cohere
+langchain-aws
 langchain-fireworks
 langchain_core
 langchain_community
@@ -18,6 +20,8 @@ langsmith
 schema
 streamlit
 selenium
+tiktoken
+transformers
 rich
 trafilatura
 watchdog

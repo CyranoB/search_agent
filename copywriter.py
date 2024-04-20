@@ -7,7 +7,6 @@ from langchain.prompts.chat import (
 from langchain.prompts.prompt import PromptTemplate
 
 
-
 def get_comments_prompt(query, draft):
     system_message = SystemMessage(
         content="""
@@ -35,13 +34,10 @@ def get_comments_prompt(query, draft):
     )
     return [system_message, human_message]
 
-
 def generate_comments(chat_llm, query, draft, callbacks=[]):
     messages = get_comments_prompt(query, draft)
     response = chat_llm.invoke(messages, config={"callbacks": callbacks})
     return response.content
-
-
 
 def get_final_text_prompt(query, draft, comments):
     system_message = SystemMessage(
@@ -75,3 +71,39 @@ def generate_final_text(chat_llm, query, draft, comments, callbacks=[]):
     messages = get_final_text_prompt(query, draft, comments)
     response = chat_llm.invoke(messages, config={"callbacks": callbacks})
     return response.content    
+
+
+def get_compare_texts_prompts(query, draft_text, final_text):
+    system_message = SystemMessage(
+        content="""
+        I want you to act as a writing quality evaluator. 
+        I will provide you with the original user request and four texts. 
+        Your task is to carefully analyze, compare the two texts across the following dimensions and grade each text 0 to 10:
+            1. Grammar and spelling - Which text has fewer grammatical errors and spelling mistakes?
+            2. Clarity and coherence - Which text is easier to understand and has a more logical flow of ideas? Evaluate how well each text conveys its main points.
+            3. Tone and style - Which text has a more appropriate and engaging tone and writing style for its intended purpose and audience?
+            4. Sticking to the request - Which text is more successful responding to the original user request. Consider the request, the style, the length, etc.
+            5. Overall effectiveness - Considering the above factors, which text is more successful overall at communicating its message and achieving its goals?
+
+        After comparing the texts on these criteria, clearly state which text you think is better and summarize the main reasons why. 
+        Provide specific examples from each text to support your evaluation.
+        """
+    )
+    human_message = HumanMessage(
+        content=f"""
+        Original query: {query}
+        ------------------------
+        Text 1: {draft_text}
+        ------------------------
+        Text 2: {final_text}
+        ------------------------
+        Summary:
+        """
+    )
+    return [system_message, human_message]
+
+
+def compare_text(chat_llm, query, draft, final, callbacks=[]):
+    messages = get_compare_texts_prompts(query, draft_text=draft, final_text=final)
+    response = chat_llm.invoke(messages, config={"callbacks": callbacks})
+    return response.content

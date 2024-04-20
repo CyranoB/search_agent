@@ -35,12 +35,13 @@ def get_sources(query, max_pages=10, domain=None):
         json_response = response.json()
 
         if 'web' not in json_response or 'results' not in json_response['web']:
+            print(response.text)
             raise Exception('Invalid API response format')
 
         final_results = [{
             'title': result['title'],
             'link': result['url'],
-            'snippet': result['description'],
+            'snippet': extract(result['description'], output_format='txt', include_tables=False, include_images=False, include_formatting=True),
             'favicon': result.get('profile', {}).get('img', '')
         } for result in json_response['web']['results']]
 

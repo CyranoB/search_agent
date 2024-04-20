@@ -28,13 +28,14 @@ from langchain.prompts.chat import (
 from langchain.prompts.prompt import PromptTemplate
 from langchain.retrievers.multi_query import MultiQueryRetriever
 
+from langchain_aws import ChatBedrock
 from langchain_cohere.chat_models import ChatCohere
 from langchain_cohere.embeddings import CohereEmbeddings
 from langchain_fireworks.chat_models import ChatFireworks
-from langchain_groq import ChatGroq
+#from langchain_groq import ChatGroq
+from langchain_groq.chat_models import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
-from langchain_community.chat_models.bedrock import BedrockChat
 from langchain_community.embeddings.bedrock import BedrockEmbeddings
 from langchain_community.chat_models.ollama import ChatOllama
 
@@ -44,15 +45,15 @@ def get_models(provider, model=None, temperature=0.0):
             credentials_profile_name=os.getenv('CREDENTIALS_PROFILE_NAME')
             if model is None:
                 model = "anthropic.claude-3-sonnet-20240229-v1:0"
-            chat_llm = BedrockChat(
+            chat_llm = ChatBedrock(
                 credentials_profile_name=credentials_profile_name,
                 model_id=model,
-                model_kwargs={"temperature": temperature, 'max_tokens': 8192 },
+                model_kwargs={"temperature": temperature, "max_tokens":4096 },
             )
-            #embedding_model = BedrockEmbeddings(
-            #    model_id='cohere.embed-multilingual-v3',
-            #    credentials_profile_name=credentials_profile_name
-            #)
+            embedding_model = BedrockEmbeddings(
+                model_id='cohere.embed-multilingual-v3',
+                credentials_profile_name=credentials_profile_name
+            )
             embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case 'openai':
             if model is None:
@@ -73,14 +74,17 @@ def get_models(provider, model=None, temperature=0.0):
             if model is None:
                 model = 'command-r-plus'
             chat_llm = ChatCohere(model=model, temperature=temperature)
-            embedding_model = CohereEmbeddings(model="embed-english-light-v3.0")
+            #embedding_model = CohereEmbeddings(model="embed-english-light-v3.0")
+            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case 'fireworks':
             if model is None:
-                model = 'accounts/fireworks/models/mixtral-8x22b-instruct-preview'
-            chat_llm = ChatFireworks(model_name=model, temperature=temperature)
+                #model = 'accounts/fireworks/models/dbrx-instruct'
+                model = 'accounts/fireworks/models/llama-v3-70b-instruct'
+            chat_llm = ChatFireworks(model_name=model, temperature=temperature, max_tokens=8192)
             embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case _:
             raise ValueError(f"Unknown LLM provider {provider}")
+    
     return chat_llm, embedding_model
 
 
@@ -96,12 +100,13 @@ def get_optimized_search_messages(query):
     """
     system_message = SystemMessage(
         content="""
-            I want you to act as a prompt optimizer for web search. I will provide you with a chat prompt, and your goal is to optimize it into a search string that will yield the most relevant and useful information from a search engine like Google.
+            I want you to act as a prompt optimizer for web search. 
+            I will provide you with a chat prompt, and your goal is to optimize it into a search string that will yield the most relevant and useful information from a search engine like Google.
             To optimize the prompt:
-            Identify the key information being requested
-            Arrange the keywords into a concise search string
-            Keep it short, around 1 to 5 words total
-            Put the most important keywords first
+            - Identify the key information being requested
+            - Arrange the keywords into a concise search string
+            - Keep it short, around 1 to 5 words total
+            - Put the most important keywords first
             
             Some tips and things to be sure to remove:
             - Remove any conversational or instructional phrases
@@ -110,44 +115,44 @@ def get_optimized_search_messages(query):
             - Remove style instructions (exmaple: "in the style of", engaging, short, long)
             - Remove lenght instruction (example: essay, article, letter, etc)
             
-            Add "**" to the end of the search string to indicate the end of the query
+            You should answer only with the optimized search query and add "**" to the end of the search string to indicate the end of the query
             
             Example:
                 Question: How do I bake chocolate chip cookies from scratch?
-                Search query: chocolate chip cookies recipe from scratch**
+                chocolate chip cookies recipe from scratch**
             Example:
                 Question: I would like you to show me a timeline of Marie Curie's life. Show results as a markdown table
-                Search query: Marie Curie timeline**
+                Marie Curie timeline**
             Example:
                 Question: I would like you to write a long article on NATO vs Russia. Use known geopolitical frameworks.
-                Search query: geopolitics nato russia**
+                geopolitics nato russia**
             Example:
                 Question: Write an engaging LinkedIn post about Andrew Ng
-                Search query: Andrew Ng**
+                Andrew Ng**
             Example:
                 Question: Write a short article about the solar system in the style of Carl Sagan
-                Search query: solar system**
+                solar system**
             Example:
                 Question: Should I use Kubernetes? Answer in the style of Gilfoyle from the TV show Silicon Valley
-                Search query: Kubernetes decision**
+                Kubernetes decision**
             Example:
                 Question: Biography of Napoleon. Include a table with the major events.
-                Search query: napoleon biography events**
+                napoleon biography events**
             Example:
                 Question: Write a short article on the history of the United States. Include a table with the major events.
-                Search query: united states history events**
+                united states history events**
             Example:
                 Question: Write a short article about the solar system in the style of donald trump
-                Search query: solar system**
+                solar system**
             Exmaple:
                 Question: Write a short linkedin about how the "freakeconomics" book previsions didn't pan out
-                Search query: freakeconomics book predictions failed**
+                freakeconomics book predictions failed**
         """
     )
     human_message = HumanMessage(
         content=f"""                 
             Question: {query}
-            Search query: 
+             
         """
     )
     return [system_message, human_message]
@@ -230,15 +235,49 @@ def multi_query_rag(chat_llm, question, search_query, vectorstore, callbacks = [
     response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
     return response.content
 
-
-def build_rag_prompt(question, search_query, vectorstore, top_k = 10, callbacks = []):
-    unique_docs = vectorstore.similarity_search(
-        search_query, k=top_k, callbacks=callbacks, verbose=True)
-    context = format_docs(unique_docs)
-    prompt = get_rag_prompt_template().format(query=question, context=context)
-    return prompt    
+def get_context_size(chat_llm):
+    if isinstance(chat_llm, ChatOpenAI):
+        if chat_llm.model_name.startswith("gpt-4"):
+            return 128000
+        else:
+            return 16385
+    if isinstance(chat_llm, ChatFireworks):
+        return 8192
+    if isinstance(chat_llm, ChatGroq):
+        return 37862
+    if isinstance(chat_llm, ChatOllama):
+        return 8192
+    if isinstance(chat_llm, ChatCohere):
+        return 128000
+    if isinstance(chat_llm, ChatBedrock):
+        if chat_llm.model_id.startswith("anthropic.claude-3"):
+            return 200000
+        if chat_llm.model_id.startswith("anthropic.claude"):
+            return 100000
+        if chat_llm.model_id.startswith("mistral"):
+            if chat_llm.model_id.startswith("mistral.mixtral-8x7b"):
+                return 4096
+            else:
+                return 8192
+    return 4096
+        
+    
+def build_rag_prompt(chat_llm, question, search_query, vectorstore, top_k = 10, callbacks = []):
+    done = False
+    while not done:
+        unique_docs = vectorstore.similarity_search(
+            search_query, k=top_k, callbacks=callbacks, verbose=True)
+        context = format_docs(unique_docs)
+        prompt = get_rag_prompt_template().format(query=question, context=context)
+        nbr_tokens = chat_llm.get_num_tokens(prompt)
+        if  top_k <= 1 or nbr_tokens <= get_context_size(chat_llm) - 768:
+            done = True
+        else:
+            top_k = int(top_k * 0.75)
+       
+    return prompt
 
 def query_rag(chat_llm, question, search_query, vectorstore, top_k = 10, callbacks = []):
-    prompt = build_rag_prompt(question, search_query, vectorstore, top_k= top_k, callbacks = callbacks)
+    prompt = build_rag_prompt(chat_llm, question, search_query, vectorstore, top_k=top_k, callbacks = callbacks)
     response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
     return response.content
