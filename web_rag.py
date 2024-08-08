@@ -28,16 +28,14 @@ from langchain.prompts.chat import (
 from langchain.prompts.prompt import PromptTemplate
 from langchain.retrievers.multi_query import MultiQueryRetriever
 
-from langchain_aws import ChatBedrock
-from langchain_cohere.chat_models import ChatCohere
-from langchain_cohere.embeddings import CohereEmbeddings
+from langchain_aws import BedrockEmbeddings
+from langchain_aws.chat_models.bedrock_converse import ChatBedrockConverse
+from langchain_cohere import ChatCohere
 from langchain_fireworks.chat_models import ChatFireworks
-#from langchain_groq import ChatGroq
 from langchain_groq.chat_models import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
-from langchain_community.embeddings.bedrock import BedrockEmbeddings
-from langchain_community.chat_models.ollama import ChatOllama
+from langchain_ollama.chat_models import ChatOllama
 
 def get_models(provider, model=None, temperature=0.0):
     match provider:
@@ -45,10 +43,10 @@ def get_models(provider, model=None, temperature=0.0):
             credentials_profile_name=os.getenv('CREDENTIALS_PROFILE_NAME')
             if model is None:
                 model = "anthropic.claude-3-sonnet-20240229-v1:0"
-            chat_llm = ChatBedrock(
+            chat_llm = ChatBedrockConverse(
                 credentials_profile_name=credentials_profile_name,
-                model_id=model,
-                model_kwargs={"temperature": temperature, "max_tokens":4096 },
+                model=model,
+                temperature=temperature,
             )
             embedding_model = BedrockEmbeddings(
                 model_id='cohere.embed-multilingual-v3',
@@ -57,7 +55,7 @@ def get_models(provider, model=None, temperature=0.0):
             embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case 'openai':
             if model is None:
-                model = "gpt-3.5-turbo"
+                model = "gpt-4o-mini"
             chat_llm = ChatOpenAI(model_name=model, temperature=temperature)
             embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case 'groq':
@@ -67,7 +65,7 @@ def get_models(provider, model=None, temperature=0.0):
             embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case 'ollama':
             if model is None:
-                model = 'llama2'
+                model = 'llama3.1'
             chat_llm = ChatOllama(model=model, temperature=temperature)
             embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case 'cohere':
@@ -78,9 +76,8 @@ def get_models(provider, model=None, temperature=0.0):
             embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case 'fireworks':
             if model is None:
-                #model = 'accounts/fireworks/models/dbrx-instruct'
-                model = 'accounts/fireworks/models/llama-v3-70b-instruct'
-            chat_llm = ChatFireworks(model_name=model, temperature=temperature, max_tokens=8192)
+                model = 'accounts/fireworks/models/llama-v3p1-8b-instruct'
+            chat_llm = ChatFireworks(model_name=model, temperature=temperature, max_tokens=120000)
             embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
         case _:
             raise ValueError(f"Unknown LLM provider {provider}")
@@ -162,7 +159,7 @@ def optimize_search_query(chat_llm, query, callbacks=[]):
     messages = get_optimized_search_messages(query)
     response = chat_llm.invoke(messages, config={"callbacks": callbacks})
     optimized_search_query = response.content
-    return optimized_search_query.strip('"').split("**", 1)[0]
+    return optimized_search_query.strip('"').split("**", 1)[0].strip()
 
 
 def get_rag_prompt_template():
@@ -242,23 +239,24 @@ def get_context_size(chat_llm):
         else:
             return 16385
     if isinstance(chat_llm, ChatFireworks):
-        return 8192
+        32768
     if isinstance(chat_llm, ChatGroq):
-        return 37862
+        return 32768
     if isinstance(chat_llm, ChatOllama):
-        return 8192
+        return 120000
     if isinstance(chat_llm, ChatCohere):
         return 128000
-    if isinstance(chat_llm, ChatBedrock):
+    if isinstance(chat_llm, ChatBedrockConverse):
+        if chat_llm.model_id.startswith("meta.llama3-1"):
+            return 128000
         if chat_llm.model_id.startswith("anthropic.claude-3"):
             return 200000
         if chat_llm.model_id.startswith("anthropic.claude"):
             return 100000
         if chat_llm.model_id.startswith("mistral"):
-            if chat_llm.model_id.startswith("mistral.mixtral-8x7b"):
-                return 4096
-            else:
-                return 8192
+            if chat_llm.model_id.startswith("mistral.mistral.mistral-large-2407"):
+                return 128000
+            return 32000
     return 4096
         
     

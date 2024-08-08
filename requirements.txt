@@ -12,10 +12,11 @@ langchain
 langchain-aws
 langchain-fireworks
 langchain_core
-langchain_cohere
+langchain-cohere
 langchain_community
 langchain_experimental
 langchain_openai
+langchain-ollama
 langchain_groq
 langsmith
 schema
