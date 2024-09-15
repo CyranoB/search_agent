@@ -31,17 +31,12 @@ from langchain_together.embeddings import TogetherEmbeddings
 
 
 def get_model(provider_model, temperature=0.0):
-    provider, model = (provider_model.split('/') + [None])[:2]
+    provider, model = (provider_model.rstrip('/').split('/') + [None])[:2]
     match provider:
         case 'bedrock':
-            #credentials_profile_name=os.getenv('CREDENTIALS_PROFILE_NAME')
             if model is None:
                 model = "anthropic.claude-3-sonnet-20240229-v1:0"
-            chat_llm = ChatBedrockConverse(
-                #credentials_profile_name=credentials_profile_name,
-                model=model,
-                temperature=temperature,
-            )
+            chat_llm = ChatBedrockConverse(model=model, temperature=temperature)
         case 'cohere':
             if model is None:
                 model = 'command-r-plus'
@@ -52,7 +47,7 @@ def get_model(provider_model, temperature=0.0):
             chat_llm = ChatFireworks(model_name=model, temperature=temperature, max_tokens=120000)
         case 'googlegenerativeai':
             if model is None:
-                model = "gemini-1.5-pro"
+                model = "gemini-1.5-flash"
             chat_llm = ChatGoogleGenerativeAI(model=model, temperature=temperature, 
                                               max_tokens=None, timeout=None, max_retries=2,)
         case 'groq':
@@ -82,16 +77,12 @@ def get_model(provider_model, temperature=0.0):
 
 
 def get_embedding_model(provider_embedding_model):
-    provider, model = (provider_embedding_model.split('/') + [None])[:2]
+    provider, model = (provider_embedding_model.rstrip('/').split('/') + [None])[:2]
     match provider:
         case 'bedrock':
-            #credentials_profile_name=os.getenv('CREDENTIALS_PROFILE_NAME')
             if model is None:
-                model = "cohere.embed-multilingual-v3"
-            embedding_model = BedrockEmbeddings(
-                model_id=model,
-                #credentials_profile_name=credentials_profile_name
-            )
+                model = "amazon.titan-embed-text-v2:0"
+            embedding_model = BedrockEmbeddings(model_id=model)
         case 'cohere':
             if model is None:
                 model = "embed-english-light-v3.0"
@@ -118,11 +109,11 @@ def get_embedding_model(provider_embedding_model):
             raise ValueError(f"Cannot use Perplexity for embedding model")
         case 'together':
             if model is None:
-                model = 'BAAI/bge-base-en-v1.5'
+                model = 'togethercomputer/m2-bert-80M-2k-retrieval'
             embedding_model = TogetherEmbeddings(model=model)
         case _:
             raise ValueError(f"Unknown LLM provider {provider}")
-        
+
     return embedding_model
 
 
@@ -233,7 +224,7 @@ class TestGetModel(unittest.TestCase):
     @patch('models.ChatGroq')
     def test_groq_model(self, mock_groq):
         result = get_model('groq')
-        mock_groq.assert_called_once_with(model_name='llama-3.1-8b-instant', temperature=0.0)
+        mock_groq.assert_called_once_with(model_name='llama2-70b-4096', temperature=0.0)
         self.assertEqual(result, mock_groq.return_value)
 
     @patch('models.ChatOllama')

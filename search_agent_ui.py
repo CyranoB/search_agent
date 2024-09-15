@@ -58,6 +58,8 @@ if "models" not in st.session_state:
     models = []
     if os.getenv("FIREWORKS_API_KEY"):
         models.append("fireworks")
+    if os.getenv("TOGETHER_API_KEY"):
+        models.append("together")
     if os.getenv("COHERE_API_KEY"):
         models.append("cohere")
     if os.getenv("OPENAI_API_KEY"):
@@ -74,7 +76,7 @@ with st.sidebar.expander("Options", expanded=False):
     model_provider = st.selectbox("Model provider 🧠", st.session_state["models"])
     temperature = st.slider("Model temperature 🌡️", 0.0, 1.0, 0.1, help="The higher the more creative")
     max_pages = st.slider("Max pages to retrieve 🔍", 1, 20, 10, help="How many web pages to retrive from the internet")
-    top_k_documents = st.slider("Nbr of doc extracts to consider 📄", 1, 20, 5, help="How many of the top extracts to consider")
+    top_k_documents = st.slider("Nbr of doc extracts to consider 📄", 1, 20, 10, help="How many of the top extracts to consider")
     reviewer_mode =  st.checkbox("Draft / Comment / Rewrite mode ✍️", value=False, help="First generate a draft, then comments and then rewrite")
 
 with st.sidebar.expander("Links", expanded=False):
@@ -148,13 +150,30 @@ if prompt := st.chat_input("Enter you instructions..." ):
 
     with st.chat_message("assistant"):
         st_cb = StreamHandler(st.empty())
-        if hasattr(chat, 'stream'):
-            response = ""
-            for chunk in chat.stream(rag_prompt, config={"callbacks": [st_cb, ls_tracer]}):
-                response += chunk.content
-        else:
-            result = chat.invoke(rag_prompt, config={"callbacks": [st_cb, ls_tracer]})
-            response = result.content
+        response = ""
+        for chunk in chat.stream(rag_prompt, config={"callbacks": [ls_tracer]}):           
+            if isinstance(chunk, dict):
+                chunk_text = chunk.get('text') or chunk.get('content', '')
+            elif isinstance(chunk, str):
+                chunk_text = chunk
+            elif hasattr(chunk, 'content'):
+                chunk_text = chunk.content
+            else:
+                chunk_text = str(chunk)
+            
+            if isinstance(chunk_text, list):
+                chunk_text = ' '.join(
+                    item['text'] if isinstance(item, dict) and 'text' in item
+                    else str(item)
+                    for item in chunk_text if item is not None
+                )
+            elif chunk_text is not None:
+                chunk_text = str(chunk_text)
+            else:
+                continue
+            
+            response += chunk_text
+            st_cb.on_llm_new_token(chunk_text)
 
         response = response.strip()
         message_id = f"{prompt}{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"

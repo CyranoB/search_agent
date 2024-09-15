@@ -22,9 +22,9 @@ Options:
     -d domain --domain=domain           Limit search to a specific domain
     -t temp --temperature=temp          Set the temperature of the LLM [default: 0.0]
     -m model --model=model              Use a specific model [default: openai/gpt-4o-mini]
-    -e model --embedding_model=model    Use a specific embedding model [default: openai/text-embedding-3-small]
+    -e model --embedding_model=model    Use a specific embedding model [default: same provider as model]
     -n num --max_pages=num              Max number of pages to retrieve [default: 10]
-    -e num --max_extracts=num           Max number of page extract to consider [default: 5]
+    -x num --max_extracts=num           Max number of page extract to consider [default: 7]
     -s --use_selenium                   Use selenium to fetch content from the web [default: False]
     -o text --output=text               Output format (choices: text, markdown) [default: markdown]
 
@@ -54,10 +54,10 @@ dotenv.load_dotenv()
 def get_selenium_driver():
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
-    from selenium.common.exceptions import TimeoutException
+    from selenium.common.exceptions import WebDriverException
 
     chrome_options = Options()
-    chrome_options.add_argument("headless")
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
@@ -66,8 +66,12 @@ def get_selenium_driver():
     chrome_options.add_argument('--blink-settings=imagesEnabled=false')
     chrome_options.add_argument("--window-size=1920,1080")
 
-    driver = webdriver.Chrome(options=chrome_options)
-    return driver
+    try:
+        driver = webdriver.Chrome(options=chrome_options)
+        return driver
+    except WebDriverException as e:
+        print(f"Error creating Selenium WebDriver: {e}")
+        return None
 
 callbacks = []
 if os.getenv("LANGCHAIN_API_KEY"):
@@ -88,7 +92,11 @@ def main(arguments):
     query = arguments["SEARCH_QUERY"]
 
     chat = md.get_model(model, temperature)
-    embedding_model = md.get_embedding_model(embedding_model)
+    if embedding_model.lower() == "same provider as model":
+        provider = model.split('/')[0]
+        embedding_model = md.get_embedding_model(f"{provider}/")
+    else:
+        embedding_model = md.get_embedding_model(embedding_model)
 
     with console.status(f"[bold green]Optimizing query for search: {query}"):
         optimize_search_query = wr.optimize_search_query(chat, query)

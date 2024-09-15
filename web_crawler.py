@@ -8,8 +8,7 @@ from trafilatura import extract
 from selenium.common.exceptions import TimeoutException
 from langchain_core.documents.base import Document
 from langchain_experimental.text_splitter import SemanticChunker
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter, TokenTextSplitter
 from langchain_community.vectorstores.faiss import FAISS
 from langsmith import traceable
 import requests
@@ -130,7 +129,6 @@ def get_links_contents(sources, get_driver_func=None, use_selenium=False):
 @traceable(run_type="embedding")
 def vectorize(contents, embedding_model):
     documents = []
-    total_content_length = 0
     for content in contents:
         try:
             page_content = content['page_content']
@@ -138,38 +136,31 @@ def vectorize(contents, embedding_model):
                 metadata = {'title': content['title'], 'source': content['link']}
                 doc = Document(page_content=content['page_content'], metadata=metadata)
                 documents.append(doc)
-                total_content_length += len(page_content)
         except Exception as e:
-            print(f"[gray]Error processing content for {content['link']}: {e}")
+            print(f"Error processing content for {content['link']}: {e}")
 
-    # Define a threshold for when to use pre-splitting (e.g., 1 million characters)
-    pre_split_threshold = 1_000_000
+    # Initialize recursive text splitter
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
 
-    if total_content_length > pre_split_threshold:
-        # Use pre-splitting for large datasets
-        pre_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=2000,
-            chunk_overlap=200,
-            length_function=len,
-        )
-        documents = pre_splitter.split_documents(documents)
+    # Split documents
+    split_documents = text_splitter.split_documents(documents)
 
-    semantic_chunker = SemanticChunker(embedding_model, breakpoint_threshold_type="percentile")
-    
+    # Create vector store
     vector_store = None
-    batch_size = 200  # Adjust this value if needed
+    batch_size = 250  # Slightly less than 256 to be safe
 
-    for i in range(0, len(documents), batch_size):
-        batch = documents[i:i+batch_size]
-        
-        # Split each document in the batch using SemanticChunker
-        chunked_docs = []
-        for doc in batch:
-            chunked_docs.extend(semantic_chunker.split_documents([doc]))
+    for i in range(0, len(split_documents), batch_size):
+        batch = split_documents[i:i+batch_size]
         
         if vector_store is None:
-            vector_store = FAISS.from_documents(chunked_docs, embedding_model)
+            vector_store = FAISS.from_documents(batch, embedding_model)
         else:
-            vector_store.add_documents(chunked_docs)
+            texts = [doc.page_content for doc in batch]
+            metadatas = [doc.metadata for doc in batch]
+            embeddings = embedding_model.embed_documents(texts)
+            vector_store.add_embeddings(
+                list(zip(texts, embeddings)),
+                metadatas
+            )
 
     return vector_store

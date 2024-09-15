@@ -96,6 +96,12 @@ def get_optimized_search_messages(query):
             Exmaple:
                 Question: Write a short linkedin about how the "freakeconomics" book previsions didn't pan out
                 freakeconomics book predictions failed**
+            Example:
+                Question: Write an LinkedIn post about startup M&A in the style of Andrew Ng
+                startup M&A**
+            Example:
+                Question: Write a linked post about the current state of M&A for startups. Write in the style of Russ from Silicon Valley TV show.
+                startup current state M&A**
         """
     )
     human_message = HumanMessage(
@@ -293,4 +299,14 @@ def build_rag_prompt(chat_llm, question, search_query, vectorstore, top_k = 10, 
 def query_rag(chat_llm, question, search_query, vectorstore, top_k = 10, callbacks = []):
     prompt = build_rag_prompt(chat_llm, question, search_query, vectorstore, top_k=top_k, callbacks = callbacks)
     response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
-    return response.content
+    
+    # Ensure we're returning a string
+    if isinstance(response.content, list):
+        # If it's a list, join the elements into a single string
+        return ' '.join(str(item) for item in response.content)
+    elif isinstance(response.content, str):
+        # If it's already a string, return it as is
+        return response.content
+    else:
+        # If it's neither a list nor a string, convert it to a string
+        return str(response.content)
