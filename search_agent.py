@@ -102,8 +102,10 @@ def main(arguments):
         embedding_model = md.get_embedding_model(embedding_model)
 
     if verbose:
-        console.log(f"Using model: {chat.model_name}")
-        console.log(f"Using embedding model: { embedding_model.model}")
+        model_name = getattr(chat, 'model_name', None) or getattr(chat, 'model', None) or getattr(chat, 'model_id', None) or str(chat)
+        embedding_model_name = getattr(embedding_model, 'model_name', None) or getattr(embedding_model, 'model', None) or getattr(embedding_model, 'model_id', None) or str(embedding_model)
+        console.log(f"Using model: {model_name}")
+        console.log(f"Using embedding model: {embedding_model_name}")
 
     with console.status(f"[bold green]Optimizing query for search: {query}"):
         optimize_search_query = wr.optimize_search_query(chat, query)
