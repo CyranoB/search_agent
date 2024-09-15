@@ -11,7 +11,7 @@ from langsmith.client import Client
 import web_rag as wr
 import web_crawler as wc
 import copywriter as cw
-
+import models as md
 dotenv.load_dotenv()
 
 ls_tracer = LangChainTracer(
@@ -54,26 +54,26 @@ def create_links_markdown(sources_list):
 st.set_page_config(layout="wide")
 st.title("🔍 Simple Search Agent 💬")
 
-if "providers" not in st.session_state:
-    providers = []
+if "models" not in st.session_state:
+    models = []
     if os.getenv("FIREWORKS_API_KEY"):
-        providers.append("fireworks")
+        models.append("fireworks")
     if os.getenv("COHERE_API_KEY"):
-        providers.append("cohere")
+        models.append("cohere")
     if os.getenv("OPENAI_API_KEY"):
-        providers.append("openai")
+        models.append("openai")
     if os.getenv("GROQ_API_KEY"):
-        providers.append("groq")
+        models.append("groq")
     if os.getenv("OLLAMA_API_KEY"):
-        providers.append("ollama")
+        models.append("ollama")
     if os.getenv("CREDENTIALS_PROFILE_NAME"):
-        providers.append("bedrock")
-    st.session_state["providers"] = providers
+        models.append("bedrock")
+    st.session_state["models"] = models
 
 with st.sidebar.expander("Options", expanded=False):
-    model_provider = st.selectbox("Model provider 🧠", st.session_state["providers"])
+    model_provider = st.selectbox("Model provider 🧠", st.session_state["models"])
     temperature = st.slider("Model temperature 🌡️", 0.0, 1.0, 0.1, help="The higher the more creative")
-    max_pages = st.slider("Max pages to retrieve 🔍", 1, 20, 15, help="How many web pages to retrive from the internet")
+    max_pages = st.slider("Max pages to retrieve 🔍", 1, 20, 10, help="How many web pages to retrive from the internet")
     top_k_documents = st.slider("Nbr of doc extracts to consider 📄", 1, 20, 5, help="How many of the top extracts to consider")
     reviewer_mode =  st.checkbox("Draft / Comment / Rewrite mode ✍️", value=False, help="First generate a draft, then comments and then rewrite")
 
@@ -108,7 +108,8 @@ if prompt := st.chat_input("Enter you instructions..." ):
     st.chat_message("user").write(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    chat, embedding_model = wr.get_models(model_provider, temperature=temperature)
+    chat = md.get_model(model_provider, temperature)
+    embedding_model = md.get_embedding_model(model_provider)
 
     with st.status("Thinking", expanded=True):
         st.write("I first need to do some research")
@@ -120,7 +121,7 @@ if prompt := st.chat_input("Enter you instructions..." ):
         links_md.markdown(create_links_markdown(sources))
        
         st.write(f"I'll now retrieve the {len(sources)} webpages and documents I found")
-        contents = wc.get_links_contents(sources)
+        contents = wc.get_links_contents(sources, use_selenium=False)
 
         st.write( f"Reading through the {len(contents)} sources I managed to retrieve")
         vector_store = wc.vectorize(contents, embedding_model=embedding_model)
@@ -147,8 +148,15 @@ if prompt := st.chat_input("Enter you instructions..." ):
 
     with st.chat_message("assistant"):
         st_cb = StreamHandler(st.empty())
-        result = chat.invoke(rag_prompt, stream=True, config={ "callbacks": [st_cb, ls_tracer]})
-        response = result.content.strip()
+        if hasattr(chat, 'stream'):
+            response = ""
+            for chunk in chat.stream(rag_prompt, config={"callbacks": [st_cb, ls_tracer]}):
+                response += chunk.content
+        else:
+            result = chat.invoke(rag_prompt, config={"callbacks": [st_cb, ls_tracer]})
+            response = result.content
+
+        response = response.strip()
         message_id = f"{prompt}{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         st.session_state.messages.append({"role": "assistant", "content": response})
         

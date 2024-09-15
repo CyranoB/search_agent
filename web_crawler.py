@@ -8,12 +8,14 @@ from trafilatura import extract
 from selenium.common.exceptions import TimeoutException
 from langchain_core.documents.base import Document
 from langchain_experimental.text_splitter import SemanticChunker
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores.faiss import FAISS
-
+from langsmith import traceable
 import requests
 import pdfplumber
 
+@traceable(run_type="tool", name="get_sources")
 def get_sources(query, max_pages=10, domain=None):      
     search_query = query
     if domain:
@@ -78,8 +80,7 @@ def fetch_with_timeout(url, timeout=8):
 
 def process_source(source):
     url = source['link']
-    #console.log(f"Processing {url}")
-    response = fetch_with_timeout(url, 8)
+    response = fetch_with_timeout(url, 2)
     if response:
         content_type = response.headers.get('Content-Type')
         if content_type:
@@ -107,12 +108,13 @@ def process_source(source):
             return {**source, 'page_content': source['snippet']}
     return {**source, 'page_content': None}
 
-def get_links_contents(sources, get_driver_func=None):
+@traceable(run_type="tool", name="get_links_contents")
+def get_links_contents(sources, get_driver_func=None, use_selenium=False):
     with ThreadPoolExecutor() as executor:
         results = list(executor.map(process_source, sources))
 
-    if get_driver_func is None:
-        return [result for result in results if result is not None]
+    if get_driver_func is None or not use_selenium:
+        return [result for result in results if result is not None and result['page_content']]
 
     for result in results:
         if result['page_content'] is None:
@@ -125,19 +127,49 @@ def get_links_contents(sources, get_driver_func=None):
                 result['page_content'] = main_content
     return results
 
+@traceable(run_type="embedding")
 def vectorize(contents, embedding_model):
     documents = []
+    total_content_length = 0
     for content in contents:
         try:
             page_content = content['page_content']
-            if page_content: # Sometimes Selenium is not fetching properly
+            if page_content:
                 metadata = {'title': content['title'], 'source': content['link']}
                 doc = Document(page_content=content['page_content'], metadata=metadata)
                 documents.append(doc)
+                total_content_length += len(page_content)
         except Exception as e:
             print(f"[gray]Error processing content for {content['link']}: {e}")
+
+    # Define a threshold for when to use pre-splitting (e.g., 1 million characters)
+    pre_split_threshold = 1_000_000
+
+    if total_content_length > pre_split_threshold:
+        # Use pre-splitting for large datasets
+        pre_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=2000,
+            chunk_overlap=200,
+            length_function=len,
+        )
+        documents = pre_splitter.split_documents(documents)
+
     semantic_chunker = SemanticChunker(embedding_model, breakpoint_threshold_type="percentile")
-    docs = semantic_chunker.split_documents(documents)
-    embeddings = OpenAIEmbeddings()
-    store = FAISS.from_documents(docs, embeddings)
-    return store
+    
+    vector_store = None
+    batch_size = 200  # Adjust this value if needed
+
+    for i in range(0, len(documents), batch_size):
+        batch = documents[i:i+batch_size]
+        
+        # Split each document in the batch using SemanticChunker
+        chunked_docs = []
+        for doc in batch:
+            chunked_docs.extend(semantic_chunker.split_documents([doc]))
+        
+        if vector_store is None:
+            vector_store = FAISS.from_documents(chunked_docs, embedding_model)
+        else:
+            vector_store.add_documents(chunked_docs)
+
+    return vector_store

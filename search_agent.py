@@ -5,10 +5,12 @@ Usage:
         [--domain=domain]
         [--provider=provider]
         [--model=model]
+        [--embedding_model=model]
         [--temperature=temp]
         [--copywrite]
         [--max_pages=num]
         [--max_extracts=num]
+        [--use_selenium]
         [--output=text]
         SEARCH_QUERY
     search_agent.py --version
@@ -19,10 +21,11 @@ Options:
     -c --copywrite                      First produce a draft, review it and rewrite for a final text
     -d domain --domain=domain           Limit search to a specific domain
     -t temp --temperature=temp          Set the temperature of the LLM [default: 0.0]
-    -p provider --provider=provider     Use a specific LLM (choices: bedrock,openai,groq,ollama,cohere,fireworks) [default: openai]
-    -m model --model=model              Use a specific model
+    -m model --model=model              Use a specific model [default: openai/gpt-4o-mini]
+    -e model --embedding_model=model    Use a specific embedding model [default: openai/text-embedding-3-small]
     -n num --max_pages=num              Max number of pages to retrieve [default: 10]
     -e num --max_extracts=num           Max number of page extract to consider [default: 5]
+    -s --use_selenium                   Use selenium to fetch content from the web [default: False]
     -o text --output=text               Output format (choices: text, markdown) [default: markdown]
 
 """
@@ -35,7 +38,7 @@ import dotenv
 
 from langchain.callbacks import LangChainTracer
 
-from langsmith import Client
+from langsmith import Client, traceable
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -43,6 +46,7 @@ from rich.markdown import Markdown
 import web_rag as wr
 import web_crawler as wc
 import copywriter as cw
+import models as md
 
 console = Console()
 dotenv.load_dotenv()
@@ -70,34 +74,24 @@ if os.getenv("LANGCHAIN_API_KEY"):
     callbacks.append(
         LangChainTracer(client=Client())
     )
-
-if __name__ == '__main__':
-    arguments = docopt(__doc__, version='Search Agent 0.1')
-    
-    #schema = Schema({
-    #    '--max_pages': Use(int, error='--max_pages must be an integer'),
-    #    '--temperature': Use(float, error='--temperature must be an float'),
-    #})
-
-    #try:
-    #    arguments = schema.validate(arguments)
-    #except SchemaError as e:
-    #    exit(e)
-
+@traceable(run_type="tool", name="search_agent")
+def main(arguments):
     copywrite_mode = arguments["--copywrite"]
-    provider = arguments["--provider"]
     model = arguments["--model"]
+    embedding_model = arguments["--embedding_model"]
     temperature = float(arguments["--temperature"])
     domain=arguments["--domain"]
-    max_pages=arguments["--max_pages"]
+    max_pages=int(arguments["--max_pages"])
     max_extract=int(arguments["--max_extracts"])
     output=arguments["--output"]
+    use_selenium=arguments["--use_selenium"]
     query = arguments["SEARCH_QUERY"]
 
-    chat, embedding_model = wr.get_models(provider, model, temperature)
+    chat = md.get_model(model, temperature)
+    embedding_model = md.get_embedding_model(embedding_model)
 
     with console.status(f"[bold green]Optimizing query for search: {query}"):
-        optimize_search_query = wr.optimize_search_query(chat, query, callbacks=callbacks)
+        optimize_search_query = wr.optimize_search_query(chat, query)
         if len(optimize_search_query) < 3:
             optimize_search_query = query
     console.log(f"Optimized search query: [bold blue]{optimize_search_query}")
@@ -111,16 +105,16 @@ if __name__ == '__main__':
     with console.status(
         f"[bold green]Fetching content for {len(sources)} sources", spinner="growVertical"
     ):
-        contents = wc.get_links_contents(sources, get_selenium_driver)
+        contents = wc.get_links_contents(sources, get_selenium_driver, use_selenium=use_selenium)
     console.log(f"Managed to extract content from {len(contents)} sources")
 
     with console.status(f"[bold green]Embedding {len(contents)} sources for content", spinner="growVertical"):
         vector_store = wc.vectorize(contents, embedding_model)
 
     with console.status("[bold green]Writing content", spinner='dots8Bit'):
-        draft = wr.query_rag(chat, query, optimize_search_query, vector_store, top_k = max_extract, callbacks=callbacks)
+        draft = wr.query_rag(chat, query, optimize_search_query, vector_store, top_k = max_extract)
 
-    console.rule(f"[bold green]Response from {provider}")
+    console.rule(f"[bold green]Response")
     if output == "text":
         console.print(draft)
     else:
@@ -129,7 +123,7 @@ if __name__ == '__main__':
     
     if(copywrite_mode):
         with console.status("[bold green]Getting comments from the reviewer", spinner="dots8Bit"):
-            comments = cw.generate_comments(chat, query, draft, callbacks=callbacks)
+            comments = cw.generate_comments(chat, query, draft)
 
         console.rule("[bold green]Response from reviewer")
         if output == "text":
@@ -139,7 +133,7 @@ if __name__ == '__main__':
         console.rule("[bold green]")
 
         with console.status("[bold green]Writing the final text", spinner="dots8Bit"):
-            final_text = cw.generate_final_text(chat, query, draft, comments, callbacks=callbacks)
+            final_text = cw.generate_final_text(chat, query, draft, comments)
 
         console.rule("[bold green]Final text")
         if output == "text":
@@ -147,3 +141,8 @@ if __name__ == '__main__':
         else:
             console.print(Markdown(final_text))
         console.rule("[bold green]")
+
+if __name__ == '__main__':
+    arguments = docopt(__doc__, version='Search Agent 0.1')
+    main(arguments)
+

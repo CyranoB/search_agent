@@ -5,6 +5,7 @@ from langchain.prompts.chat import (
     ChatPromptTemplate
 )
 from langchain.prompts.prompt import PromptTemplate
+from langsmith import traceable
 
 
 def get_comments_prompt(query, draft):
@@ -34,6 +35,7 @@ def get_comments_prompt(query, draft):
     )
     return [system_message, human_message]
 
+@traceable(run_type="llm", name="generate_comments")
 def generate_comments(chat_llm, query, draft, callbacks=[]):
     messages = get_comments_prompt(query, draft)
     response = chat_llm.invoke(messages, config={"callbacks": callbacks})
@@ -67,6 +69,7 @@ def get_final_text_prompt(query, draft, comments):
     return [system_message, human_message]
 
 
+@traceable(run_type="llm", name="generate_final_text")
 def generate_final_text(chat_llm, query, draft, comments, callbacks=[]):
     messages = get_final_text_prompt(query, draft, comments)
     response = chat_llm.invoke(messages, config={"callbacks": callbacks})

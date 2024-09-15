@@ -36,53 +36,7 @@ from langchain_groq.chat_models import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_ollama.chat_models import ChatOllama
-
-def get_models(provider, model=None, temperature=0.0):
-    match provider:
-        case 'bedrock':
-            credentials_profile_name=os.getenv('CREDENTIALS_PROFILE_NAME')
-            if model is None:
-                model = "anthropic.claude-3-sonnet-20240229-v1:0"
-            chat_llm = ChatBedrockConverse(
-                credentials_profile_name=credentials_profile_name,
-                model=model,
-                temperature=temperature,
-            )
-            embedding_model = BedrockEmbeddings(
-                model_id='cohere.embed-multilingual-v3',
-                credentials_profile_name=credentials_profile_name
-            )
-            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
-        case 'openai':
-            if model is None:
-                model = "gpt-4o-mini"
-            chat_llm = ChatOpenAI(model_name=model, temperature=temperature)
-            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
-        case 'groq':
-            if model is None:
-                model = 'mixtral-8x7b-32768'
-            chat_llm = ChatGroq(model_name=model, temperature=temperature)
-            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
-        case 'ollama':
-            if model is None:
-                model = 'llama3.1'
-            chat_llm = ChatOllama(model=model, temperature=temperature)
-            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
-        case 'cohere':
-            if model is None:
-                model = 'command-r-plus'
-            chat_llm = ChatCohere(model=model, temperature=temperature)
-            #embedding_model = CohereEmbeddings(model="embed-english-light-v3.0")
-            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
-        case 'fireworks':
-            if model is None:
-                model = 'accounts/fireworks/models/llama-v3p1-8b-instruct'
-            chat_llm = ChatFireworks(model_name=model, temperature=temperature, max_tokens=120000)
-            embedding_model = OpenAIEmbeddings(model='text-embedding-3-small')
-        case _:
-            raise ValueError(f"Unknown LLM provider {provider}")
-    
-    return chat_llm, embedding_model
+from langsmith import traceable
 
 
 def get_optimized_search_messages(query):
@@ -97,12 +51,13 @@ def get_optimized_search_messages(query):
     """
     system_message = SystemMessage(
         content="""
-            I want you to act as a prompt optimizer for web search. 
-            I will provide you with a chat prompt, and your goal is to optimize it into a search string that will yield the most relevant and useful information from a search engine like Google.
+            You are a prompt optimizer for web search. Your task is to take a given chat prompt or question and transform it into an optimized search string that will yield the most relevant and useful information from a search engine like Google.
+            The goal is to create a search query that will help users find the most accurate and pertinent information related to their original prompt or question. An effective search string should be concise, use relevant keywords, and leverage search engine syntax for better results.
+            
             To optimize the prompt:
             - Identify the key information being requested
+            - Consider any implicit information or context that might be useful for the search.
             - Arrange the keywords into a concise search string
-            - Keep it short, around 1 to 5 words total
             - Put the most important keywords first
             
             Some tips and things to be sure to remove:
@@ -111,7 +66,7 @@ def get_optimized_search_messages(query):
             - Remove lenght instruction (example: essay, article, letter, blog, post, blogpost, etc)
             - Remove style instructions (exmaple: "in the style of", engaging, short, long)
             - Remove lenght instruction (example: essay, article, letter, etc)
-            
+
             You should answer only with the optimized search query and add "**" to the end of the search string to indicate the end of the query
             
             Example:
@@ -119,19 +74,16 @@ def get_optimized_search_messages(query):
                 chocolate chip cookies recipe from scratch**
             Example:
                 Question: I would like you to show me a timeline of Marie Curie's life. Show results as a markdown table
-                Marie Curie timeline**
+                "Marie Curie" timeline**
             Example:
                 Question: I would like you to write a long article on NATO vs Russia. Use known geopolitical frameworks.
                 geopolitics nato russia**
             Example:
                 Question: Write an engaging LinkedIn post about Andrew Ng
-                Andrew Ng**
+                "Andrew Ng"**
             Example:
                 Question: Write a short article about the solar system in the style of Carl Sagan
                 solar system**
-            Example:
-                Question: Should I use Kubernetes? Answer in the style of Gilfoyle from the TV show Silicon Valley
-                Kubernetes decision**
             Example:
                 Question: Biography of Napoleon. Include a table with the major events.
                 napoleon biography events**
@@ -155,12 +107,73 @@ def get_optimized_search_messages(query):
     return [system_message, human_message]
 
 
+
+def get_optimized_search_messages2(query):
+    """
+    Generate optimized search messages for a given query.
+
+    Args:
+        query (str): The user's query.
+
+    Returns:
+        list: A list containing the system message and human message for optimized search.
+    """
+    system_message = SystemMessage(
+        content="""
+            You are a prompt optimizer for web search. Your task is to take a given chat prompt or question and transform it into an optimized search string that will yield the most relevant and useful information from a search engine like Google.
+
+            The goal is to create a search query that will help users find the most accurate and pertinent information related to their original prompt or question. An effective search string should be concise, use relevant keywords, and leverage search engine syntax for better results.
+
+            Here are some key principles for creating effective search queries:
+            1. Use specific and relevant keywords
+            2. Remove unnecessary words (articles, prepositions, etc.)
+            3. Utilize quotation marks for exact phrases
+            4. Employ Boolean operators (AND, OR, NOT) when appropriate
+            5. Include synonyms or related terms to broaden the search
+
+            I will provide you with a chat prompt or question. Your task is to optimize this into an effective search string.
+
+            Process the input as follows:
+            1. Analyze the Question to identify the main topic and key concepts.
+            2. Extract the most relevant keywords and phrases.
+            3. Consider any implicit information or context that might be useful for the search.
+
+            Then, optimize the search string by:
+            1. Removing filler words and unnecessary language
+            2. Rearranging keywords in a logical order
+            3. Adding quotation marks around exact phrases if applicable
+            4. Including relevant synonyms or related terms (in parentheses) to broaden the search
+            5. Using Boolean operators if needed to refine the search
+            
+            You should answer only with the optimized search query and add "**" to the end of the search string to indicate the end of the optimized search query
+        """
+    )
+    human_message = HumanMessage(
+        content=f"""                 
+            Question: {query}
+             
+        """
+    )
+    return [system_message, human_message]
+
+
+@traceable(run_type="llm", name="optimize_search_query")
 def optimize_search_query(chat_llm, query, callbacks=[]):
     messages = get_optimized_search_messages(query)
-    response = chat_llm.invoke(messages, config={"callbacks": callbacks})
-    optimized_search_query = response.content
-    return optimized_search_query.strip('"').split("**", 1)[0].strip()
-
+    response = chat_llm.invoke(messages)
+    optimized_search_query = response.content.strip()
+    
+    # Split by '**' and take the first part, then strip whitespace
+    optimized_search_query = optimized_search_query.split("**", 1)[0].strip()
+    
+    # Remove surrounding quotes if present
+    optimized_search_query = optimized_search_query.strip('"')
+    
+    # If the result is empty, fall back to the original query
+    if not optimized_search_query:
+        optimized_search_query = query
+    
+    return optimized_search_query
 
 def get_rag_prompt_template():
     """
@@ -185,8 +198,9 @@ def get_rag_prompt_template():
                 - Format your answer in Markdown, using heading levels 2-3 as needed
                 - Include a "References" section at the end with the full citations and link for each source you used
                 
-                If you cannot answer the question with confidence just say: "I'm not sure about the answer to be honest"
-                If the provided context is not relevant to the question, just say: "The context provided is not relevant to the question"
+                If the provided context is not relevant to the question, say it and answer with your internal knowledge.
+                If you cannot answer the question using either the extracts or your internal knowledge, state that you don't have enough information to provide an accurate answer.
+                If the information in the provided context is in contradiction with your internal knowledge, answer but warn the user about the contradiction.
             """
         )
     )
@@ -245,7 +259,7 @@ def get_context_size(chat_llm):
     if isinstance(chat_llm, ChatOllama):
         return 120000
     if isinstance(chat_llm, ChatCohere):
-        return 128000
+        return 120000
     if isinstance(chat_llm, ChatBedrockConverse):
         if chat_llm.model_id.startswith("meta.llama3-1"):
             return 128000
@@ -259,7 +273,7 @@ def get_context_size(chat_llm):
             return 32000
     return 4096
         
-    
+@traceable(run_type="retriever")    
 def build_rag_prompt(chat_llm, question, search_query, vectorstore, top_k = 10, callbacks = []):
     done = False
     while not done:
@@ -275,6 +289,7 @@ def build_rag_prompt(chat_llm, question, search_query, vectorstore, top_k = 10, 
        
     return prompt
 
+@traceable(run_type="llm", name="query_rag")
 def query_rag(chat_llm, question, search_query, vectorstore, top_k = 10, callbacks = []):
     prompt = build_rag_prompt(chat_llm, question, search_query, vectorstore, top_k=top_k, callbacks = callbacks)
     response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
