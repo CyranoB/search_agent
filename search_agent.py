@@ -12,6 +12,7 @@ Usage:
         [--max_extracts=num]
         [--use_selenium]
         [--output=text]
+        [--verbose]
         SEARCH_QUERY
     search_agent.py --version
 
@@ -27,6 +28,7 @@ Options:
     -x num --max_extracts=num           Max number of page extract to consider [default: 7]
     -s --use_selenium                   Use selenium to fetch content from the web [default: False]
     -o text --output=text               Output format (choices: text, markdown) [default: markdown]
+    -v --verbose                        Print verbose output [default: False]
 
 """
 
@@ -80,6 +82,7 @@ if os.getenv("LANGCHAIN_API_KEY"):
     )
 @traceable(run_type="tool", name="search_agent")
 def main(arguments):
+    verbose = arguments["--verbose"]
     copywrite_mode = arguments["--copywrite"]
     model = arguments["--model"]
     embedding_model = arguments["--embedding_model"]
@@ -97,6 +100,10 @@ def main(arguments):
         embedding_model = md.get_embedding_model(f"{provider}/")
     else:
         embedding_model = md.get_embedding_model(embedding_model)
+
+    if verbose:
+        console.log(f"Using model: {chat.model_name}")
+        console.log(f"Using embedding model: { embedding_model.model}")
 
     with console.status(f"[bold green]Optimizing query for search: {query}"):
         optimize_search_query = wr.optimize_search_query(chat, query)

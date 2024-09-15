@@ -72,7 +72,7 @@ python search_agent.py [OPTIONS] SEARCH_QUERY
 - `-c`, `--copywrite`: First produce a draft, review it, and rewrite for a final text.
 - `-d DOMAIN`, `--domain=DOMAIN`: Limit search to a specific domain.
 - `-t TEMP`, `--temperature=TEMP`: Set the temperature of the LLM [default: 0.0].
-- `-m MODEL`, `--model=MODEL`: Use a specific model [default: openai/gpt-4o-mini].
+- `-m MODEL`, `--model=MODEL`: Use a specific model [default: openai:gpt-4o-mini].
 - `-e MODEL`, `--embedding_model=MODEL`: Use a specific embedding model [default: same provider as model].
 - `-n NUM`, `--max_pages=NUM`: Max number of pages to retrieve [default: 10].
 - `-x NUM`, `--max_extracts=NUM`: Max number of page extracts to consider [default: 7].
@@ -82,11 +82,15 @@ python search_agent.py [OPTIONS] SEARCH_QUERY
 ### Examples
 
 ```bash
-python search_agent.py -m openai/gpt-4o-mini "Write a linked post about the current state of M&A for startups. Write in the style of Russ from Silicon Valley TV show."
+python search_agent.py -m openai:gpt-4o-mini "Write a linked post about the current state of M&A for startups. Write in the style of Russ from Silicon Valley TV show."
 ```
 
 ```bash
- python search_agent.py -m openai -e ollama -t 0.7 -n 20 -x 15  "Write a linked post about the state of M&A for startups in 2024. Write in the style of Russ from TV show Silicon Valley" -s   
+ python search_agent.py -m groq:llama-3.1-70b-versatile -e ollama:nomic-embed-text:latest -t 0.7 -n 20 -x 15  "Write a linked post about the state of M&A for startups in 2024. Write in the style of Russ from TV show Silicon Valley" -s   
+```
+
+```bash
+ python search_agent.py -m groq -e openai "Write an engaging long linked post about the state of M&A for startups in 2024"
 ```
 
 ## License

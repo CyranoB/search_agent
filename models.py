@@ -28,10 +28,14 @@ from langchain_community.chat_models import ChatPerplexity
 from langchain_together import ChatTogether
 from langchain_together.embeddings import TogetherEmbeddings
 
-
+def split_provider_model(provider_model):
+    parts = provider_model.split(':', 1)
+    provider = parts[0]
+    model = parts[1] if len(parts) > 1 else None
+    return provider, model
 
 def get_model(provider_model, temperature=0.0):
-    provider, model = (provider_model.rstrip('/').split('/') + [None])[:2]
+    provider, model = split_provider_model(provider_model)
     match provider:
         case 'bedrock':
             if model is None:
@@ -76,8 +80,8 @@ def get_model(provider_model, temperature=0.0):
     return chat_llm
 
 
-def get_embedding_model(provider_embedding_model):
-    provider, model = (provider_embedding_model.rstrip('/').split('/') + [None])[:2]
+def get_embedding_model(provider_model):
+    provider, model = split_provider_model(provider_model)
     match provider:
         case 'bedrock':
             if model is None:
@@ -224,7 +228,7 @@ class TestGetModel(unittest.TestCase):
     @patch('models.ChatGroq')
     def test_groq_model(self, mock_groq):
         result = get_model('groq')
-        mock_groq.assert_called_once_with(model_name='llama2-70b-4096', temperature=0.0)
+        mock_groq.assert_called_once_with(model_name='llama-3.1-8b-instant', temperature=0.0)
         self.assertEqual(result, mock_groq.return_value)
 
     @patch('models.ChatOllama')
