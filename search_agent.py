@@ -96,8 +96,8 @@ def main(arguments):
 
     chat = md.get_model(model, temperature)
     if embedding_model.lower() == "same provider as model":
-        provider = model.split('/')[0]
-        embedding_model = md.get_embedding_model(f"{provider}/")
+        provider = model.split(':')[0]
+        embedding_model = md.get_embedding_model(f"{provider}")
     else:
         embedding_model = md.get_embedding_model(embedding_model)
 
