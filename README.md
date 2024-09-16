@@ -3,8 +3,9 @@ title: Search Agent
 emoji: 🔍
 colorFrom: gray
 colorTo: yellow
+python_version: 3.12
 sdk: streamlit
-sdk_version: 1.33.0
+sdk_version: 1.38.0
 app_file: search_agent_ui.py
 pinned: false
 license: apache-2.0
