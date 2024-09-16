@@ -8,7 +8,7 @@ faiss-cpu
 google-api-python-client
 pdfplumber
 python-dotenv
-langchain
+langchain >= 0.3.0
 langchain-aws
 langchain-fireworks
 langchain_core
