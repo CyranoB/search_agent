@@ -1,5 +1,5 @@
 anthropic
-boto3
+boto3 >= 1.34.162
 bs4
 chromedriver-py
 cohere
@@ -9,7 +9,7 @@ google-api-python-client
 pdfplumber
 python-dotenv
 langchain >= 0.3.0
-langchain-aws
+langchain-aws >= 0.2.0
 langchain-fireworks
 langchain_core
 langchain-cohere
@@ -21,6 +21,7 @@ langchain_groq
 langchain-google-genai
 langchain-together
 langsmith
+lxml[html_clean]
 schema
 streamlit
 selenium
