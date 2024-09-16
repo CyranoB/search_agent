@@ -4,7 +4,7 @@ bs4
 chromedriver-py
 cohere
 docopt
-faiss-cpu
+faiss-cpu >= 1.8.0
 google-api-python-client
 pdfplumber >= 0.11.4
 python-dotenv >= 1.0.1
