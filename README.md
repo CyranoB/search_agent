@@ -3,7 +3,7 @@ title: Search Agent
 emoji: 🔍
 colorFrom: gray
 colorTo: yellow
-python_version: 3.12
+python_version: 3.11
 sdk: streamlit
 sdk_version: 1.38.0
 app_file: search_agent_ui.py
