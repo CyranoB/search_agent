@@ -65,7 +65,11 @@ def get_model(provider_model, temperature=0.0):
         case 'openai':
             if model is None:
                 model = "gpt-4o-mini"
-            chat_llm = ChatOpenAI(model_name=model, temperature=temperature)
+            chat_llm = ChatOpenAI(model=model, temperature=temperature)
+        case 'openrouter':
+            if model is None:
+                model = "google/gemini-flash-1.5-exp"
+            chat_llm = ChatOpenAI(model=model, temperature=temperature, base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
         case 'perplexity':
             if model is None:
                 model = 'llama-3.1-sonar-small-128k-online'
