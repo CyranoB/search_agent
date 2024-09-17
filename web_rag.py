@@ -74,13 +74,13 @@ def get_optimized_search_messages(query):
                 chocolate chip cookies recipe from scratch**
             Example:
                 Question: I would like you to show me a timeline of Marie Curie's life. Show results as a markdown table
-                "Marie Curie" timeline**
+                Marie Curie timeline**
             Example:
                 Question: I would like you to write a long article on NATO vs Russia. Use known geopolitical frameworks.
                 geopolitics nato russia**
             Example:
                 Question: Write an engaging LinkedIn post about Andrew Ng
-                "Andrew Ng"**
+                Andrew Ng**
             Example:
                 Question: Write a short article about the solar system in the style of Carl Sagan
                 solar system**
