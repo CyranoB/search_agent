@@ -1,11 +1,5 @@
 import os
-import json
-from langchain.schema import SystemMessage, HumanMessage
-from langchain.prompts.chat import (
-    HumanMessagePromptTemplate,
-    SystemMessagePromptTemplate,
-    ChatPromptTemplate
-)
+from typing import Tuple, Optional
 from langchain.prompts.prompt import PromptTemplate
 from langchain.retrievers.multi_query import MultiQueryRetriever
 
@@ -17,83 +11,122 @@ from langchain_fireworks.embeddings import FireworksEmbeddings
 from langchain_groq.chat_models import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
+from langchain_anthropic.chat_models import ChatAnthropic
+from langchain_mistralai.chat_models import ChatMistralAI
+from langchain_mistralai.embeddings import MistralAIEmbeddings
 from langchain_ollama.chat_models import ChatOllama
 from langchain_ollama.embeddings import OllamaEmbeddings
 from langchain_cohere.embeddings import CohereEmbeddings
 from langchain_cohere.chat_models import ChatCohere
+from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 from langchain_community.chat_models import ChatPerplexity
 from langchain_together import ChatTogether
 from langchain_together.embeddings import TogetherEmbeddings
+from langchain.chat_models.base import BaseChatModel
+from langchain.embeddings.base import Embeddings
 
-def split_provider_model(provider_model):
-    parts = provider_model.split(':', 1)
+def split_provider_model(provider_model: str) -> Tuple[str, Optional[str]]:
+    parts = provider_model.split(":", 1)
     provider = parts[0]
-    model = parts[1] if len(parts) > 1 else None
+    if len(parts) > 1:
+        model = parts[1] if parts[1] else None
+    else:
+        model = None
     return provider, model
 
-def get_model(provider_model, temperature=0.0):
+def get_model(provider_model: str, temperature: float = 0.7) -> BaseChatModel:
+    """
+    Get a model from a provider and model name.
+    returns BaseChatModel
+    """
     provider, model = split_provider_model(provider_model)
-    match provider:
-        case 'bedrock':
-            if model is None:
-                model = "anthropic.claude-3-sonnet-20240229-v1:0"
-            chat_llm = ChatBedrockConverse(model=model, temperature=temperature)
-        case 'cohere':
-            if model is None:
-                model = 'command-r-plus'
-            chat_llm = ChatCohere(model=model, temperature=temperature)
-        case 'fireworks':
-            if model is None:
-                model = 'accounts/fireworks/models/llama-v3p1-8b-instruct'
-            chat_llm = ChatFireworks(model_name=model, temperature=temperature, max_tokens=120000)
-        case 'googlegenerativeai':
-            if model is None:
-                model = "gemini-1.5-flash"
-            chat_llm = ChatGoogleGenerativeAI(model=model, temperature=temperature, 
-                                              max_tokens=None, timeout=None, max_retries=2,)
-        case 'groq':
-            if model is None:
-                model = 'llama-3.1-8b-instant'
-            chat_llm = ChatGroq(model_name=model, temperature=temperature)
-        case 'ollama':
-            if model is None:
-                model = 'llama3.1'
-            chat_llm = ChatOllama(model=model, temperature=temperature)
-        case 'openai':
-            if model is None:
-                model = "gpt-4o-mini"
-            chat_llm = ChatOpenAI(model=model, temperature=temperature)
-        case 'openrouter':
-            if model is None:
-                model = "google/gemini-flash-1.5-exp"
-            chat_llm = ChatOpenAI(model=model, temperature=temperature, base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
-        case 'perplexity':
-            if model is None:
-                model = 'llama-3.1-sonar-small-128k-online'
-            chat_llm = ChatPerplexity(model=model, temperature=temperature)
-        case 'together':
-            if model is None:
-                model = 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo'
-            chat_llm = ChatTogether(model=model, temperature=temperature)
-        case _:
-            raise ValueError(f"Unknown LLM provider {provider}")
+    try:
+        match provider.lower():
+            case 'anthropic':
+                if model is None:
+                    model = "claude-3-sonnet-20240229"
+                chat_llm = ChatAnthropic(model=model, temperature=temperature)
+            case 'bedrock':
+                if model is None:
+                    model = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+                chat_llm = ChatBedrockConverse(model=model, temperature=temperature)
+            case 'cohere':
+                if model is None:
+                    model = 'command-r-plus'
+                chat_llm = ChatCohere(model=model, temperature=temperature)
+            case 'fireworks':
+                if model is None:
+                    model = 'accounts/fireworks/models/llama-v3p1-8b-instruct'
+                chat_llm = ChatFireworks(model_name=model, temperature=temperature, max_tokens=120000)
+            case 'googlegenerativeai':
+                if model is None:
+                    model = "gemini-1.5-flash"
+                chat_llm = ChatGoogleGenerativeAI(model=model, temperature=temperature, 
+                                                  max_tokens=None, timeout=None, max_retries=2,)
+            case 'groq':
+                if model is None:
+                    model = 'llama-3.1-8b-instant'
+                chat_llm = ChatGroq(model_name=model, temperature=temperature)
+            case 'huggingface' | 'hf':
+                if model is None:
+                    model = 'mistralai/Mistral-Nemo-Instruct-2407'
+                llm = HuggingFaceEndpoint(
+                    repo_id=model,
+                    max_length=8192,
+                    temperature=temperature,
+                    huggingfacehub_api_token=os.getenv("HUGGINGFACE_API_KEY"),
+                )
+                chat_llm = ChatHuggingFace(llm=llm)
+            case 'ollama':
+                if model is None:
+                    model = 'llama3.1'
+                chat_llm = ChatOllama(model=model, temperature=temperature)
+            case 'openai':
+                if model is None:
+                    model = "gpt-4o-mini"
+                chat_llm = ChatOpenAI(model=model, temperature=temperature)
+            case 'openrouter':
+                if model is None:
+                    model = "google/gemini-flash-1.5-exp"
+                chat_llm = ChatOpenAI(model=model, temperature=temperature, base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
+            case 'mistralai' | 'mistral':
+                if model is None:
+                    model = "open-mistral-nemo"
+                chat_llm = ChatMistralAI(model=model, temperature=temperature)
+            case 'perplexity':
+                if model is None:
+                    model = 'llama-3.1-sonar-small-128k-online'
+                chat_llm = ChatPerplexity(model=model, temperature=temperature)
+            case 'together':
+                if model is None:
+                    model = 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo'
+                chat_llm = ChatTogether(model=model, temperature=temperature)
+            case 'xai':
+                if model is None:
+                    model = 'grok-beta'
+                chat_llm = ChatOpenAI(model=model,api_key=os.getenv("XAI_API_KEY"), base_url="https://api.x.ai/v1", temperature=temperature)
+            case _:
+                raise ValueError(f"Unknown LLM provider {provider}")
+    except Exception as e:
+        raise ValueError(f"Unexpected error with {provider}: {str(e)}")
     
     return chat_llm
 
 
-def get_embedding_model(provider_model):
+def get_embedding_model(provider_model: str) -> Embeddings:
     provider, model = split_provider_model(provider_model)
-    match provider:
+    match provider.lower():
         case 'bedrock':
             if model is None:
                 model = "amazon.titan-embed-text-v2:0"
             embedding_model = BedrockEmbeddings(model_id=model)
         case 'cohere':
             if model is None:
-                model = "embed-english-light-v3.0"
+                model = "embed-multilingual-v3"
             embedding_model = CohereEmbeddings(model=model)
         case 'fireworks':
             if model is None:
@@ -113,6 +146,14 @@ def get_embedding_model(provider_model):
             embedding_model = GoogleGenerativeAIEmbeddings(model=model)
         case 'groq':
             embedding_model = OpenAIEmbeddings(model="text-embedding-3-small")
+        case 'huggingface' | 'hf':
+            if model is None:
+                model = 'sentence-transformers/all-MiniLM-L6-v2'
+            embedding_model = HuggingFaceInferenceAPIEmbeddings(model_name=model, api_key=os.getenv("HUGGINGFACE_API_KEY"))
+        case 'mistral':
+            if model is None:
+                model = "mistral-embed"
+            embedding_model = MistralAIEmbeddings(model=model)
         case 'perplexity':
             raise ValueError(f"Cannot use Perplexity for embedding model")
         case 'together':
@@ -193,12 +234,15 @@ from models import get_model  # Make sure this import is correct
 class TestGetModel(unittest.TestCase):
 
     @patch('models.ChatBedrockConverse')
-    def test_bedrock_model(self, mock_bedrock):
+    def test_bedrock_model_no_specific_model(self, mock_bedrock):
         result = get_model('bedrock')
-        mock_bedrock.assert_called_once_with(
-            model="anthropic.claude-3-sonnet-20240229-v1:0",
-            temperature=0.0
-        )
+        mock_bedrock.assert_called_once_with(model=None, temperature=0.0)
+        self.assertEqual(result, mock_bedrock.return_value)
+
+    @patch('models.ChatBedrockConverse')
+    def test_bedrock_model_with_specific_model(self, mock_bedrock):
+        result = get_model('bedrock:specific-model')
+        mock_bedrock.assert_called_once_with(model='specific-model', temperature=0.0)
         self.assertEqual(result, mock_bedrock.return_value)
 
     @patch('models.ChatCohere')
