@@ -6,6 +6,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 
 def get_nlp_model():
+    """
+    Load and return the spaCy NLP model. Downloads the model if not already installed.
+    
+    Returns:
+        nlp: The loaded spaCy NLP model.
+    """
     if not spacy.util.is_package("en_core_web_md"):
         print("Downloading en_core_web_md model...")
         spacy.cli.download("en_core_web_md")
@@ -15,6 +21,17 @@ def get_nlp_model():
 
 
 def recursive_split_documents(contents, max_chunk_size=1000, overlap=100):
+    """
+    Split documents into smaller chunks using a recursive character text splitter.
+
+    Args:
+        contents (list): List of content dictionaries with 'page_content', 'title', and 'link'.
+        max_chunk_size (int): Maximum size of each chunk.
+        overlap (int): Overlap between chunks.
+
+    Returns:
+        list: List of chunks with text and metadata.
+    """
     from langchain_core.documents.base import Document
     from langchain.text_splitter import RecursiveCharacterTextSplitter
 
@@ -51,6 +68,19 @@ def recursive_split_documents(contents, max_chunk_size=1000, overlap=100):
 
 
 def semantic_search(query, chunks, nlp, similarity_threshold=0.5, top_n=10):
+    """
+    Perform semantic search to find relevant chunks based on similarity to the query.
+
+    Args:
+        query (str): The search query.
+        chunks (list): List of text chunks with vectors.
+        nlp: The spaCy NLP model.
+        similarity_threshold (float): Minimum similarity score to consider a chunk relevant.
+        top_n (int): Number of top relevant chunks to return.
+
+    Returns:
+        list: List of relevant chunks and their similarity scores.
+    """
     # Precompute query vector and its norm
     query_vector = nlp(query).vector
     query_norm = np.linalg.norm(query_vector) + 1e-8  # Add epsilon to avoid division by zero
@@ -84,47 +114,19 @@ def semantic_search(query, chunks, nlp, similarity_threshold=0.5, top_n=10):
     return relevant_chunks[:top_n]
 
 
-# Perform semantic search using spaCy
-def semantic_search(query, chunks, nlp, similarity_threshold=0.5, top_n=10):
-    import numpy as np
-    from concurrent.futures import ThreadPoolExecutor
-    
-    # Precompute query vector and its norm with epsilon to prevent division by zero
-    with nlp.disable_pipes(*[pipe for pipe in nlp.pipe_names if pipe != 'tok2vec']):
-        query_vector = nlp(query).vector
-    query_norm = np.linalg.norm(query_vector) + 1e-8  # Add epsilon
-    
-    # Prepare texts from chunks
-    texts = [chunk['text'] for chunk in chunks]
-    
-    # Function to process each text and compute its vector
-    def compute_vector(text):
-        with nlp.disable_pipes(*[pipe for pipe in nlp.pipe_names if pipe != 'tok2vec']):
-            doc = nlp(text)
-            vector = doc.vector
-        return vector
-    
-    # Process texts in parallel using ThreadPoolExecutor
-    with ThreadPoolExecutor() as executor:
-        chunk_vectors = list(executor.map(compute_vector, texts))
-    
-    chunk_vectors = np.array(chunk_vectors)
-    chunk_norms = np.linalg.norm(chunk_vectors, axis=1) + 1e-8  # Add epsilon
-    
-    # Compute similarities using vectorized operations
-    similarities = np.dot(chunk_vectors, query_vector) / (chunk_norms * query_norm)
-    
-    # Filter and sort results
-    relevant_chunks = [
-        (chunk, sim) for chunk, sim in zip(chunks, similarities) if sim > similarity_threshold
-    ]
-    relevant_chunks.sort(key=lambda x: x[1], reverse=True)
-    
-    return relevant_chunks[:top_n]
-
-
 @traceable(run_type="llm", name="nlp_rag")
 def query_rag(chat_llm, query, relevant_results):
+    """
+    Generate a response using retrieval-augmented generation (RAG) based on relevant results.
+
+    Args:
+        chat_llm: The chat language model to use.
+        query (str): The user's query.
+        relevant_results (list): List of relevant chunks and their similarity scores.
+
+    Returns:
+        str: The generated response.
+    """
     import web_rag as wr
 
     formatted_chunks = ""

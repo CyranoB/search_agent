@@ -19,6 +19,7 @@ Perform RAG using a single query to retrieve relevant documents.
 """
 import os
 import json
+from docopt import re
 from langchain.schema import SystemMessage, HumanMessage
 from langchain.prompts.chat import (
     HumanMessagePromptTemplate,
@@ -53,13 +54,13 @@ def get_optimized_search_messages(query):
         content="""
             You are a prompt optimizer for web search. Your task is to take a given chat prompt or question and transform it into an optimized search string that will yield the most relevant and useful information from a search engine like Google.
             The goal is to create a search query that will help users find the most accurate and pertinent information related to their original prompt or question. An effective search string should be concise, use relevant keywords, and leverage search engine syntax for better results.
-            
+
             To optimize the prompt:
             - Identify the key information being requested
             - Consider any implicit information or context that might be useful for the search.
             - Arrange the keywords into a concise search string
             - Put the most important keywords first
-            
+
             Some tips and things to be sure to remove:
             - Remove any conversational or instructional phrases
             - Removed style such as "in the style of", "engaging", "short", "long"
@@ -68,7 +69,7 @@ def get_optimized_search_messages(query):
             - Remove lenght instruction (example: essay, article, letter, etc)
 
             You should answer only with the optimized search query and add "**" to the end of the search string to indicate the end of the query
-            
+
             Example:
                 Question: How do I bake chocolate chip cookies from scratch?
                 chocolate chip cookies recipe from scratch**
@@ -105,9 +106,9 @@ def get_optimized_search_messages(query):
         """
     )
     human_message = HumanMessage(
-        content=f"""                 
+        content=f"""
             Question: {query}
-             
+
         """
     )
     return [system_message, human_message]
@@ -150,14 +151,14 @@ def get_optimized_search_messages2(query):
             3. Adding quotation marks around exact phrases if applicable
             4. Including relevant synonyms or related terms (in parentheses) to broaden the search
             5. Using Boolean operators if needed to refine the search
-            
+
             You should answer only with the optimized search query and add "**" to the end of the search string to indicate the end of the optimized search query
         """
     )
     human_message = HumanMessage(
-        content=f"""                 
+        content=f"""
             Question: {query}
-             
+
         """
     )
     return [system_message, human_message]
@@ -165,20 +166,31 @@ def get_optimized_search_messages2(query):
 
 @traceable(run_type="llm", name="optimize_search_query")
 def optimize_search_query(chat_llm, query, callbacks=[]):
+    """
+    Optimize the search query using the chat language model.
+
+    Args:
+        chat_llm: The chat language model to use.
+        query (str): The user's query.
+        callbacks (list): Optional callbacks for tracing.
+
+    Returns:
+        str: The optimized search query.
+    """
     messages = get_optimized_search_messages(query)
     response = chat_llm.invoke(messages)
     optimized_search_query = response.content.strip()
-    
+
     # Split by '**' and take the first part, then strip whitespace
     optimized_search_query = optimized_search_query.split("**", 1)[0].strip()
-    
+
     # Remove surrounding quotes if present
     optimized_search_query = optimized_search_query.strip('"')
-    
+
     # If the result is empty, fall back to the original query
     if not optimized_search_query:
         optimized_search_query = query
-    
+
     return optimized_search_query
 
 def get_rag_prompt_template():
@@ -193,7 +205,7 @@ def get_rag_prompt_template():
             input_variables=[],
             template="""
                 You are an expert research assistant.
-                You are provided with a Context in JSON format and a Question. 
+                You are provided with a Context in JSON format and a Question.
                 Each JSON entry contains: content, title, link
 
                 Use RAG to answer the Question, providing references and links to the Context material you retrieve and use in your answer:
@@ -203,7 +215,7 @@ def get_rag_prompt_template():
                 - Synthesize the retrieved information into a clear, informative answer to the question
                 - Format your answer in Markdown, using heading levels 2-3 as needed
                 - Include a "References" section at the end with the full citations and link for each source you used
-                
+
                 If the provided context is not relevant to the question, say it and answer with your internal knowledge.
                 If you cannot answer the question using either the extracts or your internal knowledge, state that you don't have enough information to provide an accurate answer.
                 If the information in the provided context is in contradiction with your internal knowledge, answer but warn the user about the contradiction.
@@ -214,7 +226,7 @@ def get_rag_prompt_template():
         prompt=PromptTemplate(
             input_variables=["context", "query"],
             template="""
-                Context: 
+                Context:
                 ---------------------
                 {context}
                 ---------------------
@@ -229,6 +241,15 @@ def get_rag_prompt_template():
     )
 
 def format_docs(docs):
+    """
+    Format the retrieved documents into a JSON string.
+
+    Args:
+        docs (list): A list of documents to format.
+
+    Returns:
+        str: The formatted documents as a JSON string.
+    """
     formatted_docs = []
     for d in docs:
         content = d.page_content
@@ -241,6 +262,19 @@ def format_docs(docs):
 
 
 def multi_query_rag(chat_llm, question, search_query, vectorstore, callbacks = []):
+    """
+    Perform RAG using multiple queries to retrieve relevant documents.
+
+    Args:
+        chat_llm: The chat language model to use.
+        question (str): The user's question.
+        search_query (str): The search query to use.
+        vectorstore: The vector store for document retrieval.
+        callbacks (list): Optional callbacks for tracing.
+
+    Returns:
+        str: The generated answer to the question.
+    """
     retriever_from_llm = MultiQueryRetriever.from_llm(
         retriever=vectorstore.as_retriever(), llm=chat_llm, include_original=True,
     )
@@ -259,7 +293,7 @@ def get_context_size(chat_llm):
         else:
             return 16385
     if isinstance(chat_llm, ChatFireworks):
-        32768
+        return 32768
     if isinstance(chat_llm, ChatGroq):
         return 32768
     if isinstance(chat_llm, ChatOllama):
@@ -278,9 +312,10 @@ def get_context_size(chat_llm):
                 return 128000
             return 32000
     return 4096
-        
-@traceable(run_type="retriever")    
+
+@traceable(run_type="retriever")
 def build_rag_prompt(chat_llm, question, search_query, vectorstore, top_k = 10, callbacks = []):
+    prompt = ""
     done = False
     while not done:
         unique_docs = vectorstore.similarity_search(
@@ -292,14 +327,12 @@ def build_rag_prompt(chat_llm, question, search_query, vectorstore, top_k = 10, 
             done = True
         else:
             top_k = int(top_k * 0.75)
-       
     return prompt
 
 @traceable(run_type="llm", name="query_rag")
 def query_rag(chat_llm, question, search_query, vectorstore, top_k = 10, callbacks = []):
     prompt = build_rag_prompt(chat_llm, question, search_query, vectorstore, top_k=top_k, callbacks = callbacks)
     response = chat_llm.invoke(prompt, config={"callbacks": callbacks})
-    
     # Ensure we're returning a string
     if isinstance(response.content, list):
         # If it's a list, join the elements into a single string

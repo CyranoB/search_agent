@@ -1,10 +1,4 @@
 from langchain.schema import SystemMessage, HumanMessage
-from langchain.prompts.chat import (
-    HumanMessagePromptTemplate,
-    SystemMessagePromptTemplate,
-    ChatPromptTemplate
-)
-from langchain.prompts.prompt import PromptTemplate
 from langsmith import traceable
 
 
@@ -21,7 +15,6 @@ def get_comments_prompt(query, draft):
             5. Ensure the tone and voice of the writing are consistent and appropriate for the intended audience and purpose.
             6. Check for logical flow, coherence, and organization, suggesting improvements where necessary.
             7. Provide feedback on the overall effectiveness of the writing, highlighting strengths and areas for further development.
-            
             Your suggestions should be constructive, insightful, and designed to help the user elevate the quality of their writing.
             You never generate the corrected text by itself. *Only* give the comment.
         """
@@ -35,11 +28,13 @@ def get_comments_prompt(query, draft):
     )
     return [system_message, human_message]
 
+
 @traceable(run_type="llm", name="generate_comments")
 def generate_comments(chat_llm, query, draft, callbacks=[]):
     messages = get_comments_prompt(query, draft)
     response = chat_llm.invoke(messages, config={"callbacks": callbacks})
     return response.content
+
 
 def get_final_text_prompt(query, draft, comments):
     system_message = SystemMessage(
@@ -73,7 +68,7 @@ def get_final_text_prompt(query, draft, comments):
 def generate_final_text(chat_llm, query, draft, comments, callbacks=[]):
     messages = get_final_text_prompt(query, draft, comments)
     response = chat_llm.invoke(messages, config={"callbacks": callbacks})
-    return response.content    
+    return response.content
 
 
 def get_compare_texts_prompts(query, draft_text, final_text):

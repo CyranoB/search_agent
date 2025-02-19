@@ -7,20 +7,32 @@ import io
 from trafilatura import extract
 from selenium.common.exceptions import TimeoutException
 from langchain_core.documents.base import Document
+from langchain_community.vectorstores.faiss import FAISS
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain.text_splitter import RecursiveCharacterTextSplitter, TokenTextSplitter
-from langchain_community.vectorstores.faiss import FAISS
 from langsmith import traceable
 import requests
 import pdfplumber
 
 @traceable(run_type="tool", name="get_sources")
-def get_sources(query, max_pages=10, domain=None):      
+def get_sources(query, max_pages=10, domain=None):
+    """
+    Fetch search results from the Brave Search API based on the given query.
+
+    Args:
+        query (str): The search query.
+        max_pages (int): Maximum number of pages to retrieve.
+        domain (str, optional): Limit search to a specific domain.
+
+    Returns:
+        list: A list of search results with title, link, snippet, and favicon.
+    """
     search_query = query
     if domain:
         search_query += f" site:{domain}"
 
     url = f"https://api.search.brave.com/res/v1/web/search?q={quote(search_query)}&count={max_pages}"
+
     headers = {
         'Accept': 'application/json',
         'Accept-Encoding': 'gzip',
@@ -52,9 +64,18 @@ def get_sources(query, max_pages=10, domain=None):
         print('Error fetching search results:', error)
         raise
 
+def fetch_with_selenium(url, driver, timeout=8):
+    """
+    Fetch the HTML content of a webpage using Selenium.
 
+    Args:
+        url (str): The URL of the webpage.
+        driver: Selenium WebDriver instance.
+        timeout (int): Page load timeout in seconds.
 
-def fetch_with_selenium(url, driver, timeout=8,):
+    Returns:
+        str: The HTML content of the page.
+    """
     try:
         driver.set_page_load_timeout(timeout)
         driver.get(url)
@@ -65,10 +86,20 @@ def fetch_with_selenium(url, driver, timeout=8,):
         html = None
     finally:
         driver.quit()
-    
+
     return html
 
 def fetch_with_timeout(url, timeout=8):
+    """
+    Fetch a webpage with a specified timeout.
+
+    Args:
+        url (str): The URL of the webpage.
+        timeout (int): Request timeout in seconds.
+
+    Returns:
+        Response: The HTTP response object, or None if an error occurred.
+    """
     try:
         response = requests.get(url, timeout=timeout)
         response.raise_for_status()
@@ -76,8 +107,16 @@ def fetch_with_timeout(url, timeout=8):
     except requests.RequestException as error:
         return None
 
-
 def process_source(source):
+    """
+    Process a single source to extract its content.
+
+    Args:
+        source (dict): A dictionary containing the source's link and other metadata.
+
+    Returns:
+        dict: The source with its extracted page content.
+    """
     url = source['link']
     response = fetch_with_timeout(url, 2)
     if response:
@@ -109,6 +148,17 @@ def process_source(source):
 
 @traceable(run_type="tool", name="get_links_contents")
 def get_links_contents(sources, get_driver_func=None, use_selenium=False):
+    """
+    Retrieve and process the content of multiple sources.
+
+    Args:
+        sources (list): A list of source dictionaries.
+        get_driver_func (callable, optional): Function to get a Selenium WebDriver.
+        use_selenium (bool): Whether to use Selenium for fetching content.
+
+    Returns:
+        list: A list of processed sources with their page content.
+    """
     with ThreadPoolExecutor() as executor:
         results = list(executor.map(process_source, sources))
 
@@ -128,6 +178,16 @@ def get_links_contents(sources, get_driver_func=None, use_selenium=False):
 
 @traceable(run_type="embedding")
 def vectorize(contents, embedding_model):
+    """
+    Vectorize the contents using the specified embedding model.
+
+    Args:
+        contents (list): A list of content dictionaries.
+        embedding_model: The embedding model to use.
+
+    Returns:
+        FAISS: A FAISS vector store containing the vectorized documents.
+    """
     documents = []
     for content in contents:
         try:
@@ -151,7 +211,7 @@ def vectorize(contents, embedding_model):
 
     for i in range(0, len(split_documents), batch_size):
         batch = split_documents[i:i+batch_size]
-        
+
         if vector_store is None:
             vector_store = FAISS.from_documents(batch, embedding_model)
         else:

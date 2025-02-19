@@ -37,7 +37,7 @@ To run the script, users need to provide their API keys for the desired language
 
 ## Features
 
-- Supports multiple language model providers (Bedrock, OpenAI, Groq, Cohere, and Ollama)
+- Supports multiple language model providers (HuggingFace, Bedrock, OpenAI, Groq, Cohere, and Ollama)
 - Optimizes search queries using a language model
 - Fetches web pages and extracts main content (HTML and PDF)
 - Vectorizes the content for efficient retrieval
@@ -55,8 +55,9 @@ To run the script, users need to provide their API keys for the desired language
 
 3. Set up API keys:
 
-   - You will need API keys for the Brave Search API and LLM API.
-   - Add your API keys to the `.env` file. Use `dotenv.sample` to create this file.
+   - create a `.env` file and add your API keys. Use `dotenv.sample` to create this file.
+   - Get an API key from the following sources: https://brave.com/search/api/
+   - Optionally you can add API keys from other LLM providers.
 
 ## Usage
 
@@ -68,19 +69,28 @@ python search_agent.py [OPTIONS] SEARCH_QUERY
 
 ### Options:
 
-- `-h`, `--help`: Show this help message and exit.
-- `--version`: Show the program's version number and exit.
-- `-c`, `--copywrite`: First produce a draft, review it, and rewrite for a final text.
-- `-d DOMAIN`, `--domain=DOMAIN`: Limit search to a specific domain.
-- `-t TEMP`, `--temperature=TEMP`: Set the temperature of the LLM [default: 0.0].
-- `-m MODEL`, `--model=MODEL`: Use a specific model [default: openai:gpt-4o-mini].
-- `-e MODEL`, `--embedding_model=MODEL`: Use a specific embedding model [default: same provider as model].
-- `-n NUM`, `--max_pages=NUM`: Max number of pages to retrieve [default: 10].
-- `-x NUM`, `--max_extracts=NUM`: Max number of page extracts to consider [default: 7].
-- `-s`, `--use_selenium`: Use selenium to fetch content from the web [default: False].
-- `-o TEXT`, `--output=TEXT`: Output format (choices: text, markdown) [default: markdown].
+   -h --help                           Show this screen.
+   --version                           Show version.
+   -c --copywrite                      First produce a draft, review it and rewrite for a final text
+   -d domain --domain=domain           Limit search to a specific domain
+   -t temp --temperature=temp          Set the temperature of the LLM [default: 0.0]
+   -m model --model=model              Use a specific model [default: hf:Qwen/Qwen2.5-72B-Instruct]
+   -e model --embedding_model=model    Use an embedding model
+   -n num --max_pages=num              Max number of pages to retrieve [default: 10]
+   -x num --max_extracts=num           Max number of page extract to consider [default: 7]
+   -b --use_browser                    Use browser to fetch content from the web [default: False]
+   -o text --output=text               Output format (choices: text, markdown) [default: markdown]
+   -v --verbose                        Print verbose output [default: False]
+
+The model can be a language model provider and a model name separated by a colon. e.g. `openai:gpt-4o-mini`
+If a embedding model is not specified, spaCy will be used for semantic search.
+
 
 ### Examples
+
+```bash
+python search_agent.py 'What is the radioactive anomaly in the Pacific Ocean?'
+```
 
 ```bash
 python search_agent.py -m openai:gpt-4o-mini "Write a linked post about the current state of M&A for startups. Write in the style of Russ from Silicon Valley TV show."
@@ -99,3 +109,25 @@ python search_agent.py -m openai:gpt-4o-mini "Write a linked post about the curr
 This project is licensed under the Apache License Version 2.0. See the `LICENSE` file for details.
 
 Let me know if you have any other questions! The key components are using a web search API to find relevant information, extracting the key snippets from the search results, passing that as context to a large language model, and having the LLM generate a natural language answer based on the web search context.
+
+## Project Structure
+
+The project consists of several key components:
+
+- `search_agent.py`: The main script that handles the core search agent functionality
+- `search_agent_ui.py`: Streamlit-based user interface for the search agent
+- `web_crawler.py`: Handles web content fetching and processing
+- `web_rag.py`: Implements the Retrieval-Augmented Generation (RAG) functionality
+- `nlp_rag.py`: Natural language processing utilities for RAG
+- `models.py`: Contains model definitions and configurations
+- `copywriter.py`: Implements content rewriting and optimization features
+
+## Additional Tools
+
+The project includes several development and configuration files:
+
+- `requirements.txt`: Lists all Python dependencies
+- `.env`: Configuration file for API keys and settings (use `dotenv.sample` as a template)
+- `.gitignore`: Specifies which files Git should ignore
+- `LICENSE`: Apache License Version 2.0
+- `.devcontainer/`: Contains development container configuration for consistent development environments

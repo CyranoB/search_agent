@@ -30,6 +30,10 @@ from langchain.chat_models.base import BaseChatModel
 from langchain.embeddings.base import Embeddings
 
 def split_provider_model(provider_model: str) -> Tuple[str, Optional[str]]:
+    """
+    Split the provider and model name from a string.
+    returns Tuple[str, Optional[str]]
+    """
     parts = provider_model.split(":", 1)
     provider = parts[0]
     if len(parts) > 1:
@@ -48,7 +52,7 @@ def get_model(provider_model: str, temperature: float = 0.7) -> BaseChatModel:
         match provider.lower():
             case 'anthropic':
                 if model is None:
-                    model = "claude-3-sonnet-20240229"
+                    model = "claude-3-5-haiku-20241022"
                 chat_llm = ChatAnthropic(model=model, temperature=temperature)
             case 'bedrock':
                 if model is None:
@@ -58,22 +62,32 @@ def get_model(provider_model: str, temperature: float = 0.7) -> BaseChatModel:
                 if model is None:
                     model = 'command-r-plus'
                 chat_llm = ChatCohere(model=model, temperature=temperature)
+
+            case 'deepseek':
+                if model is None:
+                    model='deepseek-chat'
+                chat_llm = ChatOpenAI(
+                    model=model, 
+                    openai_api_key=os.getenv("DEEPSEEK_API_KEY"), 
+                    openai_api_base='https://api.deepseek.com',
+                    max_tokens=8192
+                )
             case 'fireworks':
                 if model is None:
-                    model = 'accounts/fireworks/models/llama-v3p1-8b-instruct'
+                    model = 'accounts/fireworks/models/llama-v3p3-70b-instruct'
                 chat_llm = ChatFireworks(model_name=model, temperature=temperature, max_tokens=120000)
             case 'googlegenerativeai':
                 if model is None:
-                    model = "gemini-1.5-flash"
+                    model = "gemini-2.0-flash-exp"
                 chat_llm = ChatGoogleGenerativeAI(model=model, temperature=temperature, 
                                                   max_tokens=None, timeout=None, max_retries=2,)
             case 'groq':
                 if model is None:
-                    model = 'llama-3.1-8b-instant'
+                    model = 'qwen-2.5-32b'
                 chat_llm = ChatGroq(model_name=model, temperature=temperature)
             case 'huggingface' | 'hf':
                 if model is None:
-                    model = 'mistralai/Mistral-Nemo-Instruct-2407'
+                    model = 'Qwen/Qwen2.5-72B-Instruct'
                 llm = HuggingFaceEndpoint(
                     repo_id=model,
                     max_length=8192,
@@ -91,23 +105,23 @@ def get_model(provider_model: str, temperature: float = 0.7) -> BaseChatModel:
                 chat_llm = ChatOpenAI(model=model, temperature=temperature)
             case 'openrouter':
                 if model is None:
-                    model = "google/gemini-flash-1.5-exp"
+                    model = "cognitivecomputations/dolphin3.0-mistral-24b:free"
                 chat_llm = ChatOpenAI(model=model, temperature=temperature, base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
             case 'mistralai' | 'mistral':
                 if model is None:
-                    model = "open-mistral-nemo"
+                    model = "mistral-small-latest"
                 chat_llm = ChatMistralAI(model=model, temperature=temperature)
             case 'perplexity':
                 if model is None:
-                    model = 'llama-3.1-sonar-small-128k-online'
+                    model = 'sonar'
                 chat_llm = ChatPerplexity(model=model, temperature=temperature)
             case 'together':
                 if model is None:
-                    model = 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo'
+                    model = 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free'
                 chat_llm = ChatTogether(model=model, temperature=temperature)
             case 'xai':
                 if model is None:
-                    model = 'grok-beta'
+                    model = 'grok-2-1212'
                 chat_llm = ChatOpenAI(model=model,api_key=os.getenv("XAI_API_KEY"), base_url="https://api.x.ai/v1", temperature=temperature)
             case _:
                 raise ValueError(f"Unknown LLM provider {provider}")
@@ -118,6 +132,10 @@ def get_model(provider_model: str, temperature: float = 0.7) -> BaseChatModel:
 
 
 def get_embedding_model(provider_model: str) -> Embeddings:
+    """
+    Get an embedding model from a provider and model name.
+    returns Embeddings
+    """
     provider, model = split_provider_model(provider_model)
     match provider.lower():
         case 'bedrock':
@@ -126,7 +144,7 @@ def get_embedding_model(provider_model: str) -> Embeddings:
             embedding_model = BedrockEmbeddings(model_id=model)
         case 'cohere':
             if model is None:
-                model = "embed-multilingual-v3"
+                model = "embed-multilingual-v3.0"
             embedding_model = CohereEmbeddings(model=model)
         case 'fireworks':
             if model is None:
