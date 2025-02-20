@@ -19,6 +19,7 @@ Perform RAG using a single query to retrieve relevant documents.
 """
 import os
 import json
+from datetime import datetime
 from docopt import re
 from langchain.schema import SystemMessage, HumanMessage
 from langchain.prompts.chat import (
@@ -115,55 +116,6 @@ def get_optimized_search_messages(query):
 
 
 
-def get_optimized_search_messages2(query):
-    """
-    Generate optimized search messages for a given query.
-
-    Args:
-        query (str): The user's query.
-
-    Returns:
-        list: A list containing the system message and human message for optimized search.
-    """
-    system_message = SystemMessage(
-        content="""
-            You are a prompt optimizer for web search. Your task is to take a given chat prompt or question and transform it into an optimized search string that will yield the most relevant and useful information from a search engine like Google.
-
-            The goal is to create a search query that will help users find the most accurate and pertinent information related to their original prompt or question. An effective search string should be concise, use relevant keywords, and leverage search engine syntax for better results.
-
-            Here are some key principles for creating effective search queries:
-            1. Use specific and relevant keywords
-            2. Remove unnecessary words (articles, prepositions, etc.)
-            3. Utilize quotation marks for exact phrases
-            4. Employ Boolean operators (AND, OR, NOT) when appropriate
-            5. Include synonyms or related terms to broaden the search
-
-            I will provide you with a chat prompt or question. Your task is to optimize this into an effective search string.
-
-            Process the input as follows:
-            1. Analyze the Question to identify the main topic and key concepts.
-            2. Extract the most relevant keywords and phrases.
-            3. Consider any implicit information or context that might be useful for the search.
-
-            Then, optimize the search string by:
-            1. Removing filler words and unnecessary language
-            2. Rearranging keywords in a logical order
-            3. Adding quotation marks around exact phrases if applicable
-            4. Including relevant synonyms or related terms (in parentheses) to broaden the search
-            5. Using Boolean operators if needed to refine the search
-
-            You should answer only with the optimized search query and add "**" to the end of the search string to indicate the end of the optimized search query
-        """
-    )
-    human_message = HumanMessage(
-        content=f"""
-            Question: {query}
-
-        """
-    )
-    return [system_message, human_message]
-
-
 @traceable(run_type="llm", name="optimize_search_query")
 def optimize_search_query(chat_llm, query, callbacks=[]):
     """
@@ -200,10 +152,11 @@ def get_rag_prompt_template():
     Returns:
         ChatPromptTemplate: The prompt template for RAG.
     """
+    today = datetime.now().strftime("%Y-%m-%d")
     system_prompt = SystemMessagePromptTemplate(
         prompt=PromptTemplate(
             input_variables=[],
-            template="""
+            template=f"""
                 You are an expert research assistant.
                 You are provided with a Context in JSON format and a Question.
                 Each JSON entry contains: content, title, link
@@ -219,6 +172,8 @@ def get_rag_prompt_template():
                 If the provided context is not relevant to the question, say it and answer with your internal knowledge.
                 If you cannot answer the question using either the extracts or your internal knowledge, state that you don't have enough information to provide an accurate answer.
                 If the information in the provided context is in contradiction with your internal knowledge, answer but warn the user about the contradiction.
+
+                Today's date is {today}
             """
         )
     )

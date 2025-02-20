@@ -115,7 +115,7 @@ def semantic_search(query, chunks, nlp, similarity_threshold=0.5, top_n=10):
 
 
 @traceable(run_type="llm", name="nlp_rag")
-def query_rag(chat_llm, query, relevant_results):
+def query_rag(chat_llm, query, relevant_results, callbacks = []):
     """
     Generate a response using retrieval-augmented generation (RAG) based on relevant results.
 
@@ -127,20 +127,36 @@ def query_rag(chat_llm, query, relevant_results):
     Returns:
         str: The generated response.
     """
+    prompt = build_rag_prompt(query, relevant_results)
+    response = chat_llm.invoke(prompt).content
+    return response
+
+
+def build_rag_prompt(query, relevant_results):
     import web_rag as wr
-
-    formatted_chunks = ""
-    for chunk, similarity in relevant_results:
-        formatted_chunk = f"""
-        <source>
-        <url>{chunk['metadata']['source']}</url>
-        <title>{chunk['metadata']['title']}</title>
-        <text>{chunk['text']}</text>
-        </source>
-        """
-        formatted_chunks += formatted_chunk
-
+    formatted_chunks = format_docs(relevant_results)
     prompt = wr.get_rag_prompt_template().format(query=query, context=formatted_chunks)  
+    return prompt
 
-    draft = chat_llm.invoke(prompt).content
-    return draft
+def format_docs(relevant_results):
+    """
+    Convert relevant search results into a JSON-formatted string.
+
+    Args:
+        relevant_results (list): List of relevant chunks with metadata.
+
+    Returns:
+        str: JSON-formatted string of document chunks.
+    """
+    import json
+
+    formatted_chunks = []
+    for chunk, _ in relevant_results:  # Unpack the tuple, ignore similarity score
+        formatted_chunk = {
+            "content": chunk['text'],
+            "link": chunk['metadata'].get('source', ''),
+            "title": chunk['metadata'].get('title', ''),
+        }
+        formatted_chunks.append(formatted_chunk)
+
+    return json.dumps(formatted_chunks, indent=2)

@@ -90,9 +90,7 @@ def get_model(provider_model: str, temperature: float = 0.7) -> BaseChatModel:
                     model = 'Qwen/Qwen2.5-72B-Instruct'
                 llm = HuggingFaceEndpoint(
                     repo_id=model,
-                    max_length=8192,
                     temperature=temperature,
-                    huggingfacehub_api_token=os.getenv("HUGGINGFACE_API_KEY"),
                 )
                 chat_llm = ChatHuggingFace(llm=llm)
             case 'ollama':
